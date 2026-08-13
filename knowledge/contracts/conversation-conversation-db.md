@@ -28,7 +28,7 @@ funcionan solo porque el LLM ve su propio historial de mensajes DENTRO del mismo
 proceso — reiniciar `main.ts` pierde todo el contexto. Este contrato es la capa de
 persistencia minima que lo resuelve: guarda, por `conversationId`, la ultima query
 de busqueda, los ids de sus resultados, y el ultimo producto visto en detalle.
-Mismo patron que [catalog-db](../catalog-catalog-db.md) (`node:sqlite` nativo,
+Mismo patron que [catalog-db](./catalog-catalog-db.md) (`node:sqlite` nativo,
 cero deps), con una diferencia deliberada: `saveState` es UPSERT (sobrescribe),
 no falla en duplicado — una conversacion se actualiza en cada turno, no se
 inserta una sola vez como un producto del catalogo.
