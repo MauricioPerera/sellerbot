@@ -1,7 +1,7 @@
 ---
 type: 'Task Contract'
 title: 'Almacen SQLite del catalogo (schema + insert/get)'
-description: 'Wrapper delgado sobre node:sqlite nativo: crea el schema de productos y expone insert/get/close, sin dependencias npm.'
+description: 'Wrapper delgado sobre node:sqlite nativo: crea el schema de productos y expone insert/get/list/close, sin dependencias npm.'
 tags: ['ccdd', 'catalog', 'sqlite']
 language: typescript
 
@@ -14,7 +14,7 @@ budget:
   cyclomatic_max: 8
   nesting_max: 2
 tests: "src/agent/catalog/catalog_db.test.ts"
-tests_sha256: "e3786300f641be79b0fad91bee28d43e608bae088c857d14981040f7694a430f"
+tests_sha256: "867d12bededad9d18620e075af5bc146da41b11fe639e412921c0705da19bb38"
 touch_only: ['src/agent/catalog/catalog_db.ts']
 deps_allowed: []
 forbids: ['network', 'subprocess', 'llm']
@@ -26,9 +26,11 @@ forbids: ['network', 'subprocess', 'llm']
 Capa de persistencia minima para el catalogo dummy de sellerbot (issue
 #2). Node 24 trae `node:sqlite` (`DatabaseSync`) nativo — cero
 dependencias npm nuevas. Este contrato es SOLO schema + insert + get by
-id; la busqueda por keyword y el detalle con variaciones relacionadas son
-contratos separados que se construyen sobre este (`catalog-search-products.md`,
-`catalog-get-product-detail.md`, aun no escritos), para no acoplar
+id + listado completo; la busqueda por keyword y el detalle con
+variaciones relacionadas son contratos separados que operan sobre el
+`DbProduct[]` que devuelve `listProducts()`
+(`catalog-search-products.md`, `catalog-get-product-detail.md`, aun no
+escritos) — funciones puras, sin dependencia de SQLite, para no acoplar
 persistencia con logica de busqueda.
 
 ## Interface
@@ -48,6 +50,7 @@ export interface DbProduct {
 export interface CatalogDb {
   insertProduct(product: DbProduct): void;
   getProductById(id: string): DbProduct | null;
+  listProducts(): DbProduct[];
   close(): void;
 }
 function openCatalogDb(location: string): CatalogDb
@@ -69,6 +72,10 @@ function openCatalogDb(location: string): CatalogDb
   `Error: priceCents must be an integer`. La conversion a `$ 1.234,56`
   para mostrar al usuario es responsabilidad de la capa de presentacion,
   no de esta capa de persistencia.
+- `listProducts()` devuelve TODOS los productos insertados (sin filtrar
+  por `type`; excluir variaciones o paginar es responsabilidad de quien
+  consuma la lista), en cualquier orden — quien la use decide el orden.
+  Sobre una base vacia devuelve `[]`.
 - `close()` libera el handle de la base; no se usa el `CatalogDb` despues
   de llamarlo.
 

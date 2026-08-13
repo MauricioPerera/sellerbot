@@ -61,6 +61,39 @@ test("openCatalogDb throws when priceCents is not an integer", () => {
   db.close();
 });
 
+test("openCatalogDb listProducts returns an empty array on a fresh db", () => {
+  const db = openCatalogDb(":memory:");
+  assert.deepEqual(db.listProducts(), []);
+  db.close();
+});
+
+test("openCatalogDb listProducts returns every inserted product", () => {
+  const db = openCatalogDb(":memory:");
+  const variation: DbProduct = {
+    ...sampleProduct,
+    id: "11",
+    sku: "MH01-L-Black",
+    type: "variation",
+    parentId: "17",
+    priceCents: 4250,
+  };
+  db.insertProduct(sampleProduct);
+  db.insertProduct(variation);
+
+  const all = db.listProducts();
+  assert.equal(all.length, 2);
+  assert.deepEqual(
+    all.find((p) => p.id === "17"),
+    sampleProduct,
+  );
+  assert.deepEqual(
+    all.find((p) => p.id === "11"),
+    variation,
+  );
+
+  db.close();
+});
+
 test("openCatalogDb reopening the same file is idempotent and keeps prior data", () => {
   const file = path.join(os.tmpdir(), `catalog-test-${Date.now()}-${Math.random()}.sqlite`);
   const db1 = openCatalogDb(file);

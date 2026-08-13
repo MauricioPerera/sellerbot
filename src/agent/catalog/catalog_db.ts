@@ -14,10 +14,26 @@ export interface DbProduct {
 export interface CatalogDb {
   insertProduct(product: DbProduct): void;
   getProductById(id: string): DbProduct | null;
+  listProducts(): DbProduct[];
   close(): void;
 }
 
 import { DatabaseSync } from "node:sqlite";
+
+function rowToProduct(row: Record<string, unknown>): DbProduct {
+  return {
+    id: row.id as string,
+    sku: row.sku as string,
+    name: row.name as string,
+    type: row.type as DbProduct["type"],
+    description: row.description as string,
+    priceCents: row.price as number | null,
+    categories: JSON.parse(row.categories as string) as string[],
+    images: JSON.parse(row.images as string) as string[],
+    parentId: row.parentId as string | null,
+    attributes: JSON.parse(row.attributes as string) as DbProduct["attributes"],
+  };
+}
 
 export function openCatalogDb(location: string): CatalogDb {
   const db = new DatabaseSync(location);
@@ -42,6 +58,7 @@ export function openCatalogDb(location: string): CatalogDb {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const getById = db.prepare("SELECT * FROM products WHERE id = ?");
+  const listAll = db.prepare("SELECT * FROM products");
 
   return {
     insertProduct(product: DbProduct): void {
@@ -64,18 +81,11 @@ export function openCatalogDb(location: string): CatalogDb {
     getProductById(id: string): DbProduct | null {
       const row = getById.get(id) as Record<string, unknown> | undefined;
       if (row === undefined) return null;
-      return {
-        id: row.id as string,
-        sku: row.sku as string,
-        name: row.name as string,
-        type: row.type as DbProduct["type"],
-        description: row.description as string,
-        priceCents: row.price as number | null,
-        categories: JSON.parse(row.categories as string) as string[],
-        images: JSON.parse(row.images as string) as string[],
-        parentId: row.parentId as string | null,
-        attributes: JSON.parse(row.attributes as string) as DbProduct["attributes"],
-      };
+      return rowToProduct(row);
+    },
+    listProducts(): DbProduct[] {
+      const rows = listAll.all() as Array<Record<string, unknown>>;
+      return rows.map(rowToProduct);
     },
     close(): void {
       db.close();
