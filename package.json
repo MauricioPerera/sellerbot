@@ -1,0 +1,16 @@
+{
+  "name": "sellerbot-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test src/agent/**/*.test.ts",
+    "start": "node src/agent/main.ts"
+  },
+  "dependencies": {
+    "openai": "^7.4.0"
+  }
+}

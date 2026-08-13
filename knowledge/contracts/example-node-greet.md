@@ -6,15 +6,15 @@ tags: ['ccdd', 'template', 'multi-lenguaje']
 
 task: example_node_greet
 intent: "Demostrar un task contract completo en un lenguaje no-Python (Node.js), verde en CI."
-target: examples/multi-lang/node/greet.js
+target: examples/multi-lang/node/greet.cjs
 signature: "function greet(name)"
-test_command: "node --test examples/multi-lang/node/greet.test.js"
+test_command: "node --test examples/multi-lang/node/greet.test.cjs"
 budget:
   cyclomatic_max: 2
   nesting_max: 1
-tests: "examples/multi-lang/node/greet.test.js"
-tests_sha256: "6166d4b2051722084c04d4ee4cd2821fc052513fecc1ac0ddec23f808eb51610"
-touch_only: ['examples/multi-lang/node/greet.js']
+tests: "examples/multi-lang/node/greet.test.cjs"
+tests_sha256: "ad6bc18f03f0aef32253c49bcecec0434d3c70a8af2b7fbf2e49d8e1caa9a67b"
+touch_only: ['examples/multi-lang/node/greet.cjs']
 deps_allowed: []
 forbids: ['network', 'subprocess']
 ---
@@ -30,9 +30,9 @@ gate. Prueba tres afirmaciones concretas del multi-lenguaje documentado en
 herramientas de SIEMPRE de este repo, sin ningun cambio:
 
 1. **El sellado `tests_sha256` es agnostico de lenguaje.** El hash de
-   `greet.test.js` se genero con el mismo comando que cualquier oraculo
+   `greet.test.cjs` se genero con el mismo comando que cualquier oraculo
    Python del repo: `python scripts/validate_contracts.py --hash
-   examples/multi-lang/node/greet.test.js`.
+   examples/multi-lang/node/greet.test.cjs`.
 2. **`touch_only` (perimetro) es agnostico de lenguaje.** `fnmatch` sobre
    rutas repo-relativas no le importa la extension del archivo.
 3. **`test_command` corre verbatim.** `node --test <ruta>` es el comando
@@ -71,18 +71,18 @@ module.exports = { greet };
   seguir corriendo con Node solo, sin paso de instalacion.
 
 ## Tests
-(Los tests estan en `examples/multi-lang/node/greet.test.js`, oraculo
+(Los tests estan en `examples/multi-lang/node/greet.test.cjs`, oraculo
 congelado con `node:test`.)
 
 ## Constraints
 - Sin red, sin subprocess (`forbids`).
-- `touch_only`: unicamente `examples/multi-lang/node/greet.js`.
+- `touch_only`: unicamente `examples/multi-lang/node/greet.cjs`.
 - Es un contrato de EJEMPLO (como `sample_task.md`), no infraestructura:
   esta en el `MANIFEST` de `scripts/init_project.py` y se borra con
   `--apply` junto con los demas dominios de ejemplo.
 - PARAR y reportar si necesitas conectarte a la red.
 
 ## Criterios de aceptacion
-- [ ] `node --test examples/multi-lang/node/greet.test.js` sale en 0.
+- [ ] `node --test examples/multi-lang/node/greet.test.cjs` sale en 0.
 - [ ] `python scripts/validate_contracts.py knowledge/contracts` sigue en
       0 errores con este contrato incluido.

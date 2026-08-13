@@ -11,7 +11,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { greet } = require('./greet.js');
+const { greet } = require('./greet.cjs');
 
 test('saluda con un nombre simple', () => {
   assert.equal(greet('Ana'), 'Hello, Ana!');
