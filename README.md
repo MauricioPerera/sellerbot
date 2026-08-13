@@ -17,7 +17,8 @@ Este repo **no es** una plantilla de metodología — es un proyecto real que se
 ```bash
 npm install
 cp .env.example .env   # pegá tu POOLSIDE_API_KEY en .env (nunca en .env.example, ese se commitea)
-npm test                # 37 tests, node:test nativo, sin dependencias de testing
+npm test                # tests, node:test nativo, sin dependencias de testing
+npm run import-catalog   # carga el catalogo dummy en data/catalog.sqlite (idempotente)
 npm start                # agente interactivo en la terminal
 ```
 
@@ -36,10 +37,26 @@ src/agent/
   tools/
     get_time.ts
     calculate.ts
+  catalog/
+    parse_woocommerce_csv.ts    # parser CSV RFC4180 a mano (sin deps)
+    normalize_product_row.ts    # fila CSV cruda -> producto normalizado (tipo, precio en centavos)
+    catalog_db.ts                # persistencia SQLite (node:sqlite nativo)
+    import_catalog.ts            # orquesta parse+normalize+insert, idempotente
+    import_catalog_cli.ts        # composition root: corre el import real (no CCDD-contractado)
   main.ts                      # composition root: CLI, cablea todo lo anterior (no CCDD-contractado)
 ```
 
-Cada archivo salvo `main.ts` tiene su contrato en [`knowledge/contracts/agent-*.md`](knowledge/contracts/), con oráculo de tests propio y `touch_only` acotado a ese único archivo.
+Cada archivo salvo `main.ts` e `import_catalog_cli.ts` tiene su contrato en [`knowledge/contracts/agent-*.md`](knowledge/contracts/) y [`knowledge/contracts/catalog-*.md`](knowledge/contracts/), con oráculo de tests propio y `touch_only` acotado a ese único archivo.
+
+## Catálogo (dummy WooCommerce)
+
+`data/woocommerce-sample-data.csv` es un snapshot local versionado (ver [`data/README.md`](data/README.md)) — el import nunca depende de que una URL externa siga viva o sin cambios.
+
+```bash
+npm run import-catalog   # crea/actualiza data/catalog.sqlite; correrlo de nuevo no duplica nada
+rm data/catalog.sqlite   # reset: borra la base local (gitignored, se regenera con el import)
+npm run import-catalog   # recarga limpia para una demo
+```
 
 ## Metodología
 

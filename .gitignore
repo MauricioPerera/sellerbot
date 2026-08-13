@@ -26,6 +26,10 @@ build/
 *.egg-info/
 coverage/
 
+# Catalogo SQLite generado por `npm run import-catalog` (no es fuente; se
+# reconstruye desde data/woocommerce-sample-data.csv, que si se versiona).
+data/*.sqlite
+
 # .agents es donde residen las reglas de los agentes, por lo tanto NO lo ignoramos.
 # Sin embargo, los logs generados por ellos sí (evidencia local, no versionada):
 .agents/logs/*

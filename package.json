@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "node --test src/agent/**/*.test.ts",
-    "start": "node --env-file-if-exists=.env src/agent/main.ts"
+    "start": "node --env-file-if-exists=.env src/agent/main.ts",
+    "import-catalog": "node src/agent/catalog/import_catalog_cli.ts"
   },
   "dependencies": {
     "openai": "^7.4.0"
