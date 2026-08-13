@@ -20,6 +20,7 @@ cp .env.example .env   # pegá tu POOLSIDE_API_KEY en .env (nunca en .env.exampl
 npm test                # tests, node:test nativo, sin dependencias de testing
 npm run import-catalog   # carga el catalogo dummy en data/catalog.sqlite (idempotente)
 npm start                # agente interactivo en la terminal
+npm run web               # UI de chat web en http://localhost:3000
 ```
 
 Requiere Node 24+ (usa `--env-file-if-exists` y type-stripping nativo de TypeScript; no hay paso de build).
@@ -56,6 +57,19 @@ Cada archivo salvo `main.ts` e `import_catalog_cli.ts` tiene su contrato en [`kn
 npm run import-catalog   # crea/actualiza data/catalog.sqlite; correrlo de nuevo no duplica nada
 rm data/catalog.sqlite   # reset: borra la base local (gitignored, se regenera con el import)
 npm run import-catalog   # recarga limpia para una demo
+```
+
+## Interfaz web
+
+`npm run web` levanta un servidor HTTP (módulo nativo `http`, sin Express) en `http://localhost:3000` (o `$PORT`) que reusa exactamente el mismo `runAgentTurn` + tools + persistencia que la CLI — es la misma sesión de agente, solo con otro front.
+
+- Frontend estático servido por el propio proceso (`src/agent/web/public/`): HTML/CSS/JS sin build ni framework.
+- Cada turno del chat es una respuesta JSON única (no streaming al navegador); el texto del modelo se renderiza con `src/agent/web/render_markdown.ts` — un parser de markdown mínimo, hecho a mano, que escapa todo el HTML antes de aplicar cualquier transformación (headings, negrita, itálica, código, links e imágenes con whitelist de esquema `http(s)://`/`/`).
+- El `conversationId` se genera y persiste en `localStorage` del navegador, así que recargar la página conserva el historial (misma base `data/conversations.sqlite` que usa la CLI).
+
+```bash
+npm run web
+# abrir http://localhost:3000
 ```
 
 ## Metodología

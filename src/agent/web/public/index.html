@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sellerbot</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>sellerbot</h1>
+    <p class="subtitle">Preguntame por productos, precios, talles y variantes.</p>
+  </header>
+
+  <main id="chat" aria-live="polite"></main>
+
+  <form id="composer">
+    <input
+      id="input"
+      type="text"
+      autocomplete="off"
+      placeholder="Escribi un mensaje…"
+      aria-label="Mensaje"
+    />
+    <button type="submit">Enviar</button>
+  </form>
+
+  <script src="/app.js"></script>
+</body>
+</html>
