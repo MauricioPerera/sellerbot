@@ -3,9 +3,10 @@ type: 'Task Contract'
 title: 'Dispatcher de tool_calls'
 description: 'Resuelve un tool_call acumulado contra el registro de tools, parsea sus argumentos JSON y ejecuta la tool.'
 tags: ['ccdd', 'agent', 'poolside']
+language: typescript
 
 task: agent_execute_tool_call
-intent: "Ejecutar un tool_call acumulado contra el registro de tools y devolver el mensaje de rol tool."
+intent: "Ejecutar un tool_call acumulado contra el registro de tools."
 target: src/agent/execute_tool_call.ts
 signature: "async function executeToolCall(toolCall: AccumulatedToolCall, registry: ToolRegistry): Promise<ToolResultMessage>"
 test_command: "node --test src/agent/execute_tool_call.test.ts"

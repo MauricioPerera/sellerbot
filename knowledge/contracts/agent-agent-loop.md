@@ -3,6 +3,7 @@ type: 'Task Contract'
 title: 'Loop de orquestacion del agente'
 description: 'Consume un stream de chat, acumula deltas, ejecuta tool_calls y repite hasta una respuesta final sin tool_calls, con limite de turnos.'
 tags: ['ccdd', 'agent', 'poolside', 'streaming']
+language: typescript
 
 task: agent_agent_loop
 intent: "Orquestar turnos de chat con tool-calling hasta obtener una respuesta final, con la funcion de chat inyectada."

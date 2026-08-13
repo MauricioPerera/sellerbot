@@ -3,6 +3,7 @@ type: 'Task Contract'
 title: 'Registro de tools del agente'
 description: 'Indexa una lista de AgentTool por nombre, en un Map, rechazando nombres duplicados.'
 tags: ['ccdd', 'agent', 'poolside']
+language: typescript
 
 task: agent_tool_registry
 intent: "Indexar tools por nombre en un registro, detectando duplicados."

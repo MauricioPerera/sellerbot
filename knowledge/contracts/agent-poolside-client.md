@@ -3,9 +3,10 @@ type: 'Task Contract'
 title: 'Cliente Poolside (OpenAI-compatible)'
 description: 'Wrapper delgado sobre el SDK openai apuntado al endpoint OpenAI-compatible de Poolside, con defaults de baseURL y modelo.'
 tags: ['ccdd', 'agent', 'poolside']
+language: typescript
 
 task: agent_poolside_client
-intent: "Construir un cliente de chat streaming contra la API OpenAI-compatible de Poolside, con baseURL y modelo por defecto."
+intent: "Construir un cliente de chat streaming contra la API OpenAI-compatible de Poolside."
 target: src/agent/poolside_client.ts
 signature: "function createPoolsideClient(config: PoolsideClientConfig): PoolsideClient"
 test_command: "node --test src/agent/poolside_client.test.ts"

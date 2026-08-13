@@ -3,9 +3,10 @@ type: 'Task Contract'
 title: 'Acumulador de deltas de streaming'
 description: 'Reduce fragmentos de streaming (texto y tool_calls fragmentados por indice) a un mensaje acumulado.'
 tags: ['ccdd', 'agent', 'poolside', 'streaming']
+language: typescript
 
 task: agent_accumulate_stream_delta
-intent: "Fusionar fragmentos de texto y de tool_calls de un stream OpenAI-compatible en un estado acumulado."
+intent: "Reducir un delta de streaming a un estado acumulado."
 target: src/agent/accumulate_stream_delta.ts
 signature: "function accumulateStreamDelta(state: AccumulatedMessage, delta: StreamDelta): AccumulatedMessage"
 test_command: "node --test src/agent/accumulate_stream_delta.test.ts"

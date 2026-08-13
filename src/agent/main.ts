@@ -15,7 +15,7 @@ if (!apiKey) {
 }
 
 const client = createPoolsideClient({ apiKey });
-const registry = createToolRegistry([getTimeTool]);
+const registry = createToolRegistry([getTimeTool()]);
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
 console.log(`Connected to ${client.config.model} via ${client.config.baseURL}.`);
