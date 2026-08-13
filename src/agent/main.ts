@@ -30,6 +30,7 @@ while (true) {
 
   messages = await runAgentTurn(client.streamChat, messages, registry, {
     onText: (chunk) => process.stdout.write(chunk),
+    onToolCall: (name, args) => process.stdout.write(`\n[tool: ${name}(${args})]\n`),
   });
 
   process.stdout.write("\n\n");

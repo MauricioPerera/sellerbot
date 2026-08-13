@@ -78,6 +78,53 @@ test("runAgentTurn executes a tool call and feeds the result back for a second t
   assert.equal(messages.at(-1)?.content, "done");
 });
 
+test("runAgentTurn invokes onToolCall with the tool name and raw arguments", async () => {
+  let call = 0;
+  const chatFn: ChatFn = () => {
+    call += 1;
+    if (call === 1) {
+      return toStream([
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  { index: 0, id: "call_1", function: { name: "echo", arguments: "" } },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          choices: [
+            { delta: { tool_calls: [{ index: 0, function: { arguments: '{"text":"hi"}' } }] } },
+          ],
+        },
+        { choices: [{ delta: {}, finish_reason: "tool_calls" }] },
+      ]);
+    }
+    return toStream([
+      { choices: [{ delta: { content: "done" } }] },
+      { choices: [{ delta: {}, finish_reason: "stop" }] },
+    ]);
+  };
+
+  const echoTool: AgentTool = {
+    name: "echo",
+    description: "Echoes input.",
+    parameters: { type: "object", properties: { text: { type: "string" } } },
+    execute: async (args) => ({ echoed: args.text }),
+  };
+  const registry = createToolRegistry([echoTool]);
+  const calls: Array<{ name: string; args: string }> = [];
+
+  await runAgentTurn(chatFn, [{ role: "user", content: "echo hi" }], registry, {
+    onToolCall: (name, args) => calls.push({ name, args }),
+  });
+
+  assert.deepEqual(calls, [{ name: "echo", args: '{"text":"hi"}' }]);
+});
+
 test("runAgentTurn stops after maxTurns to avoid an infinite tool-call loop", async () => {
   const chatFn: ChatFn = () =>
     toStream([

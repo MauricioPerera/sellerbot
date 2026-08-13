@@ -14,7 +14,7 @@ budget:
   cyclomatic_max: 8
   nesting_max: 3
 tests: "src/agent/agent_loop.test.ts"
-tests_sha256: "5691259b14b9ffcc2d7dabaaf4733162feea2913ea8add29fb13c91c10d71de3"
+tests_sha256: "69966d86ea7f25417796dd3abfc53b147ac9e5aaac493df94d0bc9f48249bdfa"
 touch_only: ['src/agent/agent_loop.ts']
 deps_allowed: []
 forbids: ['network', 'subprocess']
@@ -34,7 +34,11 @@ red ni el SDK de `openai`.
 ## Interface
 ```typescript
 export type ChatFn = (messages: AgentMessage[], tools: OpenAiToolSchema[]) => AsyncIterable<StreamChunk>;
-export interface RunAgentTurnOptions { onText?: (chunk: string) => void; maxTurns?: number; }
+export interface RunAgentTurnOptions {
+  onText?: (chunk: string) => void;
+  onToolCall?: (name: string, args: string) => void;
+  maxTurns?: number;
+}
 async function runAgentTurn(
   chatFn: ChatFn,
   messages: AgentMessage[],
@@ -52,6 +56,11 @@ async function runAgentTurn(
   extendido.
 - `onText` se invoca con cada fragmento de texto no vacio, en orden, antes
   de que termine el turno.
+- `onToolCall` se invoca una vez por cada tool_call acumulado (nombre +
+  `arguments` crudo, string JSON sin parsear), justo antes de ejecutarlo
+  ([execute-tool-call](./agent-execute-tool-call.md)) — visibilidad para
+  quien consume el loop (ej. `main.ts` logueando qué tool se disparo),
+  sin acoplar la orquestacion a como se muestra esa informacion.
 - Nunca entra en loop infinito: a partir de `maxTurns` (default 10) lanza
   `Error: maxTurns exceeded`.
 
@@ -64,6 +73,8 @@ async function runAgentTurn(
   segundo turno.
 - Tool que siempre devuelve otro `tool_call` (`loop`), con
   `maxTurns: 2` -> lanza `Error: maxTurns exceeded`.
+- Stream con un `tool_call` a `echo` y `arguments: '{"text":"hi"}'` ->
+  `onToolCall` se llama una vez con `("echo", '{"text":"hi"}')`.
 
 ## Do / Don't
 - DO: recibir `chatFn` como dependencia inyectada (para poder testear sin

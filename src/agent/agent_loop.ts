@@ -24,6 +24,7 @@ export type ChatFn = (
 
 export interface RunAgentTurnOptions {
   onText?: (chunk: string) => void;
+  onToolCall?: (name: string, args: string) => void;
   maxTurns?: number;
 }
 
@@ -79,6 +80,10 @@ export async function runAgentTurn(
 
     if (state.toolCalls.length === 0) {
       return currentMessages;
+    }
+
+    for (const tc of state.toolCalls) {
+      options.onToolCall?.(tc.name, tc.arguments);
     }
 
     const toolResults = await Promise.all(
