@@ -51,8 +51,17 @@ class TestVersioning(unittest.TestCase):
             f"CHANGELOG.md tiene entrada '## v' pero no matchea semver pattern en línea: {semver_line}"
         )
 
-    def test_readme_mentions_changelog_en_and_es(self) -> None:
-        """README.md menciona CHANGELOG.md en EN y en ES."""
+    def test_readme_mentions_changelog(self) -> None:
+        """README.md menciona CHANGELOG.md.
+
+        La plantilla original exigia un README bilingue EN/ES con un ancla
+        '<a id="espanol">' para particionar ambas secciones. Un proyecto
+        instanciado que reescribe su README para describir su propio
+        producto (no la metodologia) legitimamente no tiene esa estructura
+        -- el invariante que importa es mas simple: el README sigue
+        apuntando al CHANGELOG, sin importar el idioma o la cantidad de
+        secciones.
+        """
         self.assertTrue(
             self.readme.exists(),
             f"README.md falta en {self.readme}"
@@ -60,26 +69,10 @@ class TestVersioning(unittest.TestCase):
 
         content = self.readme.read_text(encoding="utf-8")
 
-        # Particiona por <a id="español">
-        if "<a id=\"español\">" not in content:
-            self.fail(
-                "README.md no contiene el ancla '<a id=\"español\">' para particionar EN/ES"
-            )
-
-        english_section, spanish_section = content.split("<a id=\"español\">", 1)
-
-        # Busca "CHANGELOG.md" en la sección EN
         self.assertIn(
             "CHANGELOG.md",
-            english_section,
-            "README.md sección EN (antes de <a id='español'>) no menciona CHANGELOG.md"
-        )
-
-        # Busca "CHANGELOG.md" en la sección ES
-        self.assertIn(
-            "CHANGELOG.md",
-            spanish_section,
-            "README.md sección ES (después de <a id='español'>) no menciona CHANGELOG.md"
+            content,
+            "README.md no menciona CHANGELOG.md"
         )
 
     def test_upgrade_node_exists_and_indexed(self) -> None:

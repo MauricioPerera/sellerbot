@@ -9,7 +9,7 @@ task: agent_calculate_expression
 intent: "Evaluar una expresion aritmetica de texto a un numero."
 target: src/agent/calculate_expression.ts
 signature: "function calculateExpression(expression: string): number"
-test_command: "node --test calculate_expression.test.ts"
+test_command: "node --test src/agent/calculate_expression.test.ts"
 budget:
   cyclomatic_max: 4
   nesting_max: 2

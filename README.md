@@ -65,6 +65,8 @@ El desarrollo siguió disciplina KDD/CCDD de punta a punta: primero el contrato 
 - **Nivel 1** (obligatorio): `python scripts/validate_contracts.py knowledge/contracts` — estructura del contrato, sello `tests_sha256`, perímetro `touch_only`.
 - **Nivel 2** (gate real de complejidad/integración vía MCP `ccdd-complexity`): `lint_task_contract` + `run_integration_gate` sobre el export de `scripts/export_gate_contract.py`.
 
+El [`CHANGELOG.md`](CHANGELOG.md) de este repo registra el tooling/infraestructura KDD vendorizada (los gates, no el producto) — los cambios de sellerbot en sí viven en el historial de git.
+
 La referencia completa de la metodología (no específica de este proyecto) vive en [`knowledge/index.md`](knowledge/index.md) y [`.agents/AGENTS.md`](.agents/AGENTS.md) — léelos si vas a agregar una tool nueva o tocar el loop del agente; cualquier cambio a `src/agent/*.ts` (salvo `main.ts`) debe pasar por un contrato antes de implementarse.
 
 ## Seguridad

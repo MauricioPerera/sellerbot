@@ -9,7 +9,7 @@ task: agent_tool_calculate
 intent: "Exponer calculateExpression como una tool de aritmetica del agente."
 target: src/agent/tools/calculate.ts
 signature: "function calculateTool(): AgentTool"
-test_command: "node --test calculate.test.ts"
+test_command: "node --test src/agent/tools/calculate.test.ts"
 budget:
   cyclomatic_max: 4
   nesting_max: 2
