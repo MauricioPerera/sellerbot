@@ -12,7 +12,7 @@ const sampleProduct: DbProduct = {
   name: "Chaz Kangeroo Hoodie",
   type: "variable",
   description: "<p>Ideal for cold-weather training.</p>",
-  price: null,
+  priceCents: null,
   categories: ["Clothing>Men>Tops", "Clothing"],
   images: ["https://example.com/a.jpg"],
   parentId: null,
@@ -32,7 +32,7 @@ test("openCatalogDb returns null for an unknown id", () => {
   db.close();
 });
 
-test("openCatalogDb round-trips a variation with a parentId and a real price", () => {
+test("openCatalogDb round-trips a variation with a parentId and a real priceCents", () => {
   const db = openCatalogDb(":memory:");
   const variation: DbProduct = {
     ...sampleProduct,
@@ -40,7 +40,7 @@ test("openCatalogDb round-trips a variation with a parentId and a real price", (
     sku: "MH01-L-Black",
     type: "variation",
     parentId: "17",
-    price: 42.5,
+    priceCents: 4250,
   };
   db.insertProduct(variation);
   assert.deepEqual(db.getProductById("11"), variation);
@@ -51,6 +51,13 @@ test("openCatalogDb throws on a duplicate id insert", () => {
   const db = openCatalogDb(":memory:");
   db.insertProduct(sampleProduct);
   assert.throws(() => db.insertProduct(sampleProduct));
+  db.close();
+});
+
+test("openCatalogDb throws when priceCents is not an integer", () => {
+  const db = openCatalogDb(":memory:");
+  const invalid: DbProduct = { ...sampleProduct, id: "99", priceCents: 42.5 };
+  assert.throws(() => db.insertProduct(invalid), /priceCents must be an integer/);
   db.close();
 });
 

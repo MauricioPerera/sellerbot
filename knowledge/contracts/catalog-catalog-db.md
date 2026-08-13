@@ -14,7 +14,7 @@ budget:
   cyclomatic_max: 8
   nesting_max: 2
 tests: "src/agent/catalog/catalog_db.test.ts"
-tests_sha256: "b646f89e713c66134699ac3866e351fdbf4980cf33190da186da1c4c330ad27a"
+tests_sha256: "e3786300f641be79b0fad91bee28d43e608bae088c857d14981040f7694a430f"
 touch_only: ['src/agent/catalog/catalog_db.ts']
 deps_allowed: []
 forbids: ['network', 'subprocess', 'llm']
@@ -39,7 +39,7 @@ export interface DbProduct {
   name: string;
   type: "simple" | "variable" | "variation";
   description: string;
-  price: number | null;
+  priceCents: number | null;
   categories: string[];
   images: string[];
   parentId: string | null;
@@ -64,6 +64,11 @@ function openCatalogDb(location: string): CatalogDb
   insertado (arrays y `null` incluidos).
 - `getProductById` con un id inexistente devuelve `null` (nunca lanza).
 - Insertar dos veces el mismo `id` lanza (constraint de clave primaria).
+- `priceCents` es SIEMPRE un entero (centavos de ARS) o `null` — nunca un
+  float. `insertProduct` con un `priceCents` no entero lanza
+  `Error: priceCents must be an integer`. La conversion a `$ 1.234,56`
+  para mostrar al usuario es responsabilidad de la capa de presentacion,
+  no de esta capa de persistencia.
 - `close()` libera el handle de la base; no se usa el `CatalogDb` despues
   de llamarlo.
 

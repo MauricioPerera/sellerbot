@@ -4,7 +4,7 @@ export interface DbProduct {
   name: string;
   type: "simple" | "variable" | "variation";
   description: string;
-  price: number | null;
+  priceCents: number | null;
   categories: string[];
   images: string[];
   parentId: string | null;
@@ -45,13 +45,16 @@ export function openCatalogDb(location: string): CatalogDb {
 
   return {
     insertProduct(product: DbProduct): void {
+      if (product.priceCents !== null && !Number.isInteger(product.priceCents)) {
+        throw new Error("priceCents must be an integer");
+      }
       insert.run(
         product.id,
         product.sku,
         product.name,
         product.type,
         product.description,
-        product.price,
+        product.priceCents,
         JSON.stringify(product.categories),
         JSON.stringify(product.images),
         product.parentId,
@@ -67,7 +70,7 @@ export function openCatalogDb(location: string): CatalogDb {
         name: row.name as string,
         type: row.type as DbProduct["type"],
         description: row.description as string,
-        price: row.price as number | null,
+        priceCents: row.price as number | null,
         categories: JSON.parse(row.categories as string) as string[],
         images: JSON.parse(row.images as string) as string[],
         parentId: row.parentId as string | null,
