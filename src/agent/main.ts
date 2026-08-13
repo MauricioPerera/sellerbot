@@ -22,7 +22,13 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 console.log(`Connected to ${client.config.model} via ${client.config.baseURL}.`);
 console.log("Type a message and press Enter (Ctrl+C to exit).\n");
 
-let messages: AgentMessage[] = [];
+let messages: AgentMessage[] = [
+  {
+    role: "system",
+    content:
+      "Always call the calculate tool for arithmetic instead of computing it yourself, even for simple expressions. Always call the get_time tool when asked for the current time instead of guessing it.",
+  },
+];
 
 while (true) {
   const userInput = await rl.question("> ");
