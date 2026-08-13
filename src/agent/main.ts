@@ -31,7 +31,15 @@ let messages: AgentMessage[] = [
 ];
 
 while (true) {
-  const userInput = await rl.question("> ");
+  let userInput: string;
+  try {
+    userInput = await rl.question("> ");
+  } catch {
+    // Input closed (EOF/piped stdin ended): exit the loop cleanly instead
+    // of crashing on ERR_USE_AFTER_CLOSE.
+    break;
+  }
+
   messages = [...messages, { role: "user", content: userInput }];
 
   messages = await runAgentTurn(client.streamChat, messages, registry, {
@@ -41,3 +49,5 @@ while (true) {
 
   process.stdout.write("\n\n");
 }
+
+process.stdout.write("Bye.\n");
