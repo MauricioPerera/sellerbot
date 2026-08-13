@@ -1,6 +1,12 @@
 # Changelog
 
-All notable changes to the KDD Template are documented here.
+This CHANGELOG records the **KDD tooling and infrastructure vendored into this
+repository** -- the quality gates under `scripts/` and the contract framework under
+`knowledge/` inherited from the upstream KDD Template. It does **not** track the
+product history of **sellerbot** (the Poolside chat agent itself); changes to
+sellerbot live in `git log` and the repository's commit messages. Version entries
+(`## v1.x.x`) below are the historical record of that vendored tooling, not of the
+sellerbot product.
 
 ## Unreleased
 
