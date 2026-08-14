@@ -14,7 +14,7 @@ budget:
   cyclomatic_max: 20
   nesting_max: 4
 tests: "src/agent/orders/orders_db.test.ts"
-tests_sha256: "de36f8408fc158a75706d998c80c782ce954d26244782f3d24a1fc745f29079e"
+tests_sha256: "84c7413fd131de2f9584faca1128dd1d05fc7a935cbb991b448f6ec94d7a9823"
 touch_only: ['src/agent/orders/orders_db.ts']
 deps_allowed: []
 forbids: ['network', 'subprocess', 'llm']
@@ -62,6 +62,17 @@ FINAL (ya con el descuento restado, si hubo uno) -- quien llama
 `createOrder`, este contrato solo lo persiste junto con que codigo/monto de
 descuento lo produjo.
 
+Issue #9 batch C (snapshot de promocion en la orden): mismo tratamiento
+EXACTO que el cupon, en paralelo -- `Order` gana `promotionId` y
+`promotionDiscountCents`; `createOrder` gana un QUINTO parametro opcional
+`promotion?: { id: string; discountCents: number } | null`. Cupon y
+promocion son snapshots INDEPENDIENTES (una orden puede tener ambos, uno
+solo, o ninguno) -- `totalCents` sigue siendo el total FINAL ya con AMBOS
+descuentos restados (si los hubo), calculado por quien llama
+(`confirm_purchase`, tipicamente via
+[promotions-combine-discounts](./promotions-combine-discounts.md)) antes
+de invocar `createOrder`.
+
 ## Interface
 ```typescript
 export type OrderStatus = "pending_payment" | "paid" | "payment_failed" | "shipped" | "cancelled";
@@ -80,6 +91,8 @@ export interface Order {
   totalCents: number;
   couponCode: string | null;
   discountCents: number;
+  promotionId: string | null;
+  promotionDiscountCents: number;
   payToken: string;
   createdAt: string;
   updatedAt: string;
@@ -105,6 +118,7 @@ export interface OrdersDb {
     items: OrderItem[],
     totalCents: number,
     coupon?: { code: string; discountCents: number } | null,
+    promotion?: { id: string; discountCents: number } | null,
   ): Order;
   getOrder(orderId: string): Order | null;
   getOrderByPayToken(payToken: string): Order | null;
@@ -119,18 +133,27 @@ function openOrdersDb(location: string): OrdersDb
 ```
 
 ## Invariants
-- `createOrder(conversationId, items, totalCents, coupon?)` genera un `id` y un
-  `payToken` nuevos (ambos strings unicos, ej. `crypto.randomUUID()`,
-  DISTINTOS entre si), crea la orden con `status: "pending_payment"`, crea un
-  `Payment` asociado con `status: "pending"`, y agrega un `OrderEvent` con
-  `type: "order_created"`. `createdAt`/`updatedAt` se estampan con la hora
-  real (`new Date().toISOString()`) en el momento de la creacion.
+- `createOrder(conversationId, items, totalCents, coupon?, promotion?)` genera
+  un `id` y un `payToken` nuevos (ambos strings unicos, ej.
+  `crypto.randomUUID()`, DISTINTOS entre si), crea la orden con `status:
+  "pending_payment"`, crea un `Payment` asociado con `status: "pending"`, y
+  agrega un `OrderEvent` con `type: "order_created"`. `createdAt`/`updatedAt`
+  se estampan con la hora real (`new Date().toISOString()`) en el momento de
+  la creacion.
 - `coupon` OMITIDO o `null` (comportamiento de issue #4, sin cambios): la
   orden queda con `couponCode: null`, `discountCents: 0`.
 - `coupon: { code, discountCents }` presente: la orden queda con
   `couponCode: code` y `discountCents: discountCents` TAL CUAL se pasaron --
   este contrato NO valida el cupon (eso ya lo hizo `evaluate_coupon.ts`
   antes de llamar aca), solo persiste el snapshot.
+- `promotion` OMITIDO o `null` (mismo criterio que `coupon`): la orden queda
+  con `promotionId: null`, `promotionDiscountCents: 0`.
+- `promotion: { id, discountCents }` presente: la orden queda con
+  `promotionId: id` y `promotionDiscountCents: discountCents` TAL CUAL se
+  pasaron -- este contrato NO valida la promocion (eso ya lo hizo
+  `evaluate_promotion.ts`/`combine_discounts.ts` antes de llamar aca), solo
+  persiste el snapshot. `coupon` y `promotion` son independientes entre si:
+  cualquier combinacion (ninguno, uno solo, ambos) es valida.
 - `createOrder` con `items: []` LANZA (no se puede confirmar una compra vacia).
 - `getOrder(id)`/`getOrderByPayToken(token)` devuelven `null` si no existe,
   nunca lanzan. `getOrderByPayToken` encuentra la MISMA orden que devolveria
@@ -193,6 +216,12 @@ function openOrdersDb(location: string): OrdersDb
 - `createOrder("conv-1", items, 19300)` (sin cuarto argumento) -> `Order`
   con `couponCode: null, discountCents: 0`, identico al comportamiento
   previo a issue #6.
+- `createOrder("conv-1", items, 11100, null, { id: "promo-1", discountCents:
+  2700 })` -> `Order` con `totalCents: 11100, promotionId: "promo-1",
+  promotionDiscountCents: 2700` (`couponCode: null, discountCents: 0`).
+- `createOrder("conv-1", items, 9000, { code: "WELCOME10", discountCents:
+  1380 }, { id: "promo-1", discountCents: 2700 })` -> `Order` con AMBOS
+  snapshots presentes a la vez.
 - Orden `paid`, `adminTransition(id, "shipped", "local-admin", "enviado")` ->
   `Order` con `status: "shipped"`; el ultimo evento tiene `actor:
   "local-admin"`, `fromStatus: "paid"`, `toStatus: "shipped"`, `reason:
@@ -224,14 +253,18 @@ function openOrdersDb(location: string): OrdersDb
 - DON'T: validar el cupon aca (vigencia, elegibilidad, calculo del
   descuento) -- eso ya paso por `evaluate_coupon.ts` antes; este contrato
   solo persiste el `code`/`discountCents` que le pasan.
+- DON'T: validar la promocion aca -- eso ya paso por
+  `evaluate_promotion.ts`/`combine_discounts.ts` antes; este contrato solo
+  persiste el `id`/`discountCents` que le pasan.
 
 ## Tests
 (Los tests estan en `src/agent/orders/orders_db.test.ts`, oraculo congelado con
 `node:test`, usando `:memory:` para los casos deterministas y un archivo
 temporal real para el caso de reinicio. Cubre creacion/pago (15 tests
 originales de issue #4), listado y transiciones administrativas (10 tests
-de issue #5), y el snapshot de cupon/descuento en la orden (3 tests nuevos
-de issue #6).)
+de issue #5), el snapshot de cupon/descuento en la orden (3 tests de
+issue #6), y el snapshot de promocion en la orden (4 tests nuevos de
+issue #9, incluyendo la combinacion de ambos snapshots a la vez).)
 
 ## Constraints
 - Sin red, sin subprocess, sin llamadas a modelo (`forbids`).

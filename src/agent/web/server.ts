@@ -71,7 +71,7 @@ function buildRegistry(conversationId: string) {
     removeFromCartTool(cartDb, conversationId),
     updateCartQuantityTool(cartDb, conversationId),
     viewCartTool(cartDb, COUPONS, promotionsDb, catalog, conversationId),
-    confirmPurchaseTool(cartDb, ordersDb, COUPONS, conversationId),
+    confirmPurchaseTool(cartDb, ordersDb, COUPONS, promotionsDb, catalog, conversationId),
     checkOrderStatusTool(ordersDb),
     applyCouponTool(cartDb, COUPONS, conversationId),
     removeCouponTool(cartDb, conversationId),

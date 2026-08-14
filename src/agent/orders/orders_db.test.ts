@@ -254,3 +254,43 @@ test("openOrdersDb getOrder round-trips the coupon fields", () => {
   assert.deepEqual(db.getOrder(order.id), order);
   db.close();
 });
+
+test("openOrdersDb createOrder without a promotion sets promotionId to null and promotionDiscountCents to 0", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 13800);
+  assert.equal(order.promotionId, null);
+  assert.equal(order.promotionDiscountCents, 0);
+  db.close();
+});
+
+test("openOrdersDb createOrder with a promotion sets promotionId and promotionDiscountCents from the given values", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 11100, null, { id: "promo-1", discountCents: 2700 });
+  assert.equal(order.promotionId, "promo-1");
+  assert.equal(order.promotionDiscountCents, 2700);
+  assert.equal(order.totalCents, 11100);
+  db.close();
+});
+
+test("openOrdersDb getOrder round-trips the promotion fields", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 11100, null, { id: "promo-1", discountCents: 2700 });
+  assert.deepEqual(db.getOrder(order.id), order);
+  db.close();
+});
+
+test("openOrdersDb createOrder persists coupon and promotion snapshots independently", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder(
+    "conv-1",
+    sampleItems,
+    9000,
+    { code: "WELCOME10", discountCents: 1380 },
+    { id: "promo-1", discountCents: 2700 },
+  );
+  assert.equal(order.couponCode, "WELCOME10");
+  assert.equal(order.discountCents, 1380);
+  assert.equal(order.promotionId, "promo-1");
+  assert.equal(order.promotionDiscountCents, 2700);
+  db.close();
+});
