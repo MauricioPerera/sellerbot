@@ -7,9 +7,7 @@ Este repo **no es** una plantilla de metodología — es un proyecto real que se
 ## Qué hace
 
 - Loop de chat streaming contra `poolside/laguna-s-2.1` (u otro modelo compatible), con reconstrucción manual de `tool_calls` fragmentados durante el stream.
-- Dos tools de ejemplo:
-  - `get_time` — hora UTC actual en ISO 8601.
-  - `calculate` — evalúa expresiones aritméticas (`+ - * / ()`) con un parser recursive-descent propio, **sin `eval`/`new Function`**.
+- Tools: `get_time` (hora UTC actual), `calculate` (aritmética con un parser recursive-descent propio, **sin `eval`/`new Function`**), `search_products`/`get_product_detail` (catálogo), `add_to_cart`/`remove_from_cart`/`update_cart_quantity`/`view_cart` (carrito conversacional por sesión), `confirm_purchase`/`check_order_status` (checkout con pasarela de pago **simulada**).
 - Visibilidad de qué tool se disparó (`[tool: nombre(args)]`) impresa en la terminal.
 
 ## Quickstart
@@ -34,20 +32,36 @@ src/agent/
   execute_tool_call.ts        # despacha un tool_call al registro, nunca lanza
   poolside_client.ts          # wrapper del SDK openai contra el endpoint de Poolside
   calculate_expression.ts     # parser aritmético puro (grammar recursive-descent)
-  agent_loop.ts                # orquesta turnos: stream -> tool_calls -> repite hasta respuesta final
+  agent_loop.ts               # orquesta turnos: stream -> tool_calls -> repite hasta respuesta final
   tools/
-    get_time.ts
-    calculate.ts
+    get_time.ts / calculate.ts
+    search_products.ts / get_product_detail.ts       # wrappers sobre catalog/*
+    add_to_cart.ts / remove_from_cart.ts / update_cart_quantity.ts / view_cart.ts
+    confirm_purchase.ts / check_order_status.ts       # checkout
   catalog/
     parse_woocommerce_csv.ts    # parser CSV RFC4180 a mano (sin deps)
     normalize_product_row.ts    # fila CSV cruda -> producto normalizado (tipo, precio en centavos)
-    catalog_db.ts                # persistencia SQLite (node:sqlite nativo)
-    import_catalog.ts            # orquesta parse+normalize+insert, idempotente
-    import_catalog_cli.ts        # composition root: corre el import real (no CCDD-contractado)
+    catalog_db.ts               # persistencia SQLite (node:sqlite nativo)
+    search_products.ts / get_product_detail.ts  # busqueda/detalle, puros
+    import_catalog.ts           # orquesta parse+normalize+insert, idempotente
+    import_catalog_cli.ts       # composition root: corre el import real (no CCDD-contractado)
+  conversation/
+    conversation_db.ts          # ultima busqueda/producto visto por conversationId (sobrevive reinicio)
+    conversation_context.ts     # helpers compartidos por main.ts/server.ts (no CCDD-contractado)
+  cart/
+    cart_db.ts                                  # persistencia del carrito por conversationId
+    cart_add_item.ts / cart_remove_item.ts / cart_set_quantity.ts / cart_summary.ts  # operaciones puras
+  orders/
+    orders_db.ts                # ordenes/pagos/eventos, maquina de estados (ver seccion Carrito y checkout)
+  web/
+    server.ts                   # composition root: servidor HTTP (no CCDD-contractado)
+    render_markdown.ts          # markdown -> HTML seguro contra XSS
+    render_pay_page.ts          # HTML de la pagina mock de pago
+    public/                     # frontend estatico (HTML/CSS/JS sin build)
   main.ts                      # composition root: CLI, cablea todo lo anterior (no CCDD-contractado)
 ```
 
-Cada archivo salvo `main.ts` e `import_catalog_cli.ts` tiene su contrato en [`knowledge/contracts/agent-*.md`](knowledge/contracts/) y [`knowledge/contracts/catalog-*.md`](knowledge/contracts/), con oráculo de tests propio y `touch_only` acotado a ese único archivo.
+Cada archivo salvo los explícitamente marcados "no CCDD-contractado" tiene su contrato en [`knowledge/contracts/`](knowledge/contracts/) (`agent-*`, `catalog-*`, `cart-*`, `orders-*`, `web-*`), con oráculo de tests propio y `touch_only` acotado a ese único archivo.
 
 ## Catálogo (dummy WooCommerce)
 
@@ -57,6 +71,29 @@ Cada archivo salvo `main.ts` e `import_catalog_cli.ts` tiene su contrato en [`kn
 npm run import-catalog   # crea/actualiza data/catalog.sqlite; correrlo de nuevo no duplica nada
 rm data/catalog.sqlite   # reset: borra la base local (gitignored, se regenera con el import)
 npm run import-catalog   # recarga limpia para una demo
+```
+
+## Carrito y checkout (pasarela de pago simulada)
+
+Flujo conversacional completo: buscar/elegir producto -> `add_to_cart` -> ajustar
+con `update_cart_quantity`/`remove_from_cart` -> `view_cart` para revisar ->
+confirmación **explícita** del usuario ("confirmar compra") -> `confirm_purchase`
+crea una orden `pending_payment` con un pay link único y vacía el carrito.
+
+- Moneda única: **ARS**, guardada siempre en centavos enteros; el agente la
+  muestra formateada (`$ 1.234,56`), nunca los centavos crudos.
+- El pay link (`/pay/<token>`) abre una página mock (sin datos financieros
+  reales) con botones **Aprobar pago** / **Rechazar pago**; una vez resuelto
+  el pago, la página no permite volver a decidir (ni la API: reintentar
+  aprobar/rechazar un pago ya resuelto devuelve `409`).
+- El agente nunca inventa el resultado de un pago: usa `check_order_status`
+  para consultar el estado real persistido en `data/orders.sqlite`
+  (`pending_payment` / `paid` / `payment_failed`).
+- Todo queda trazable: orden, pago y cada transición de estado con su
+  timestamp se guardan en SQLite (`orders`, `payments`, `order_events`).
+
+```bash
+rm -f data/cart.sqlite data/orders.sqlite   # reset: carrito/órdenes de demo (gitignored)
 ```
 
 ## Interfaz web
