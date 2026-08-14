@@ -121,9 +121,50 @@ agente aplica un código con `apply_coupon` (o lo remueve con
   orden: `couponCode`/`discountCents` en `data/orders.sqlite`, junto con el
   `totalCents` ya descontado. Una confirmación exitosa limpia el cupón de la
   conversación.
-- Fuera de alcance de esta iteración: **promociones vinculadas entre
-  productos** ("con este producto, el segundo accesorio tiene descuento") —
-  ver [#9](https://github.com/MauricioPerera/sellerbot/issues/9).
+- Un cupón puede coexistir con una promoción vinculada aplicada (ver
+  abajo); el campo `appliesToPromotionalItems` de cada cupón decide si su
+  descuento también alcanza al producto que trajo la promoción.
+
+## Promociones vinculadas entre productos
+
+Reglas del tipo "si tenés el producto A en el carrito, el producto B tiene
+descuento" (ej. "con este hoodie, el segundo con 50% off"). A diferencia de
+los cupones (dataset fijo en código), las reglas viven en
+`data/promotions.sqlite` vía `src/agent/promotions/promotions_db.ts` — un
+CRUD real pensado para un panel administrativo (crear/desactivar/borrar
+reglas en runtime, no hardcodeadas).
+
+- **Nunca se aplican solas.** `check_promotions` es de solo lectura: el
+  agente la llama después de agregar un producto al carrito para ver si
+  desbloqueó una promoción, y se lo comunica al usuario — pero no toca el
+  carrito. Solo `apply_promotion` (llamada con el `promotion_id` sugerido,
+  **tras confirmación explícita del usuario**) agrega el producto con
+  descuento; el agente tiene prohibido llamarla sin esa confirmación.
+- `evaluate_promotion.ts` es el motor puro: dado el carrito y una regla,
+  decide si el producto disparador está presente y calcula el descuento
+  sobre el precio del producto B resuelto en el catálogo — nunca inventado
+  por el modelo.
+- **Interacción con cupones**: si hay un cupón Y una promoción aplicados a
+  la vez, `combine_discounts.ts` los combina. El campo
+  `appliesToPromotionalItems` del cupón decide si su descuento también
+  alcanza al producto promocionado; si contradice el `combinableWithCoupons`
+  de la regla, **gana el cupón** (decisión explícita del producto).
+- `view_cart` y `confirm_purchase` usan la misma función de combinación, así
+  que el total que se muestra antes de confirmar y el que queda persistido
+  en la orden son siempre consistentes.
+- `confirm_purchase` re-evalúa la promoción al momento de confirmar (mismo
+  criterio de auto-sanación que los cupones: una promoción desactivada
+  entre que se sugirió y que se confirma se ignora en silencio) y persiste
+  el snapshot final en la orden: `promotionId`/`promotionDiscountCents` en
+  `data/orders.sqlite`. Una confirmación exitosa limpia la promoción
+  aplicada de la conversación (no remueve el producto del carrito, solo
+  detiene el descuento futuro).
+- `remove_promotion` quita el descuento sin sacar el producto agregado
+  (usar `remove_from_cart` aparte si también se quiere sacar el ítem).
+
+```bash
+rm -f data/promotions.sqlite   # reset: reglas de promoción de demo (gitignored)
+```
 
 ## Dashboard administrativo
 
