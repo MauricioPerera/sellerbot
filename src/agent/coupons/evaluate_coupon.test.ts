@@ -24,6 +24,7 @@ const percentCoupon: Coupon = {
   validFrom: null,
   validUntil: null,
   applicableProductIds: null,
+  appliesToPromotionalItems: true,
 };
 
 test("evaluateCoupon returns invalid with a null coupon (code not found)", () => {
@@ -126,4 +127,11 @@ test("evaluateCoupon returns invalid when a cart item has no price", () => {
 test("evaluateCoupon does not mutate the input cart", () => {
   evaluateCoupon(cart, percentCoupon, NOW);
   assert.equal(cart.items.length, 2);
+});
+
+test("evaluateCoupon's result does not depend on appliesToPromotionalItems", () => {
+  const excludesPromo: Coupon = { ...percentCoupon, appliesToPromotionalItems: false };
+  const resultTrue = evaluateCoupon(cart, percentCoupon, NOW);
+  const resultFalse = evaluateCoupon(cart, excludesPromo, NOW);
+  assert.deepEqual(resultTrue, resultFalse);
 });

@@ -8,6 +8,7 @@ export interface Coupon {
   validFrom: string | null;
   validUntil: string | null;
   applicableProductIds: string[] | null;
+  appliesToPromotionalItems: boolean;
 }
 
 export interface CouponEvaluation {

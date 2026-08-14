@@ -14,6 +14,7 @@ export const COUPONS: Coupon[] = [
     validFrom: null,
     validUntil: null,
     applicableProductIds: null,
+    appliesToPromotionalItems: true,
   },
   {
     code: "AHORRA500",
@@ -23,6 +24,7 @@ export const COUPONS: Coupon[] = [
     validFrom: null,
     validUntil: null,
     applicableProductIds: null,
+    appliesToPromotionalItems: true,
   },
   {
     code: "HOODIE15",
@@ -32,6 +34,7 @@ export const COUPONS: Coupon[] = [
     validFrom: null,
     validUntil: null,
     applicableProductIds: ["145", "139", "136"],
+    appliesToPromotionalItems: false,
   },
   {
     code: "VERANO2025",
@@ -41,6 +44,7 @@ export const COUPONS: Coupon[] = [
     validFrom: "2025-01-01T00:00:00.000Z",
     validUntil: "2025-03-31T23:59:59.999Z",
     applicableProductIds: null,
+    appliesToPromotionalItems: true,
   },
 ];
 

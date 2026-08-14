@@ -14,7 +14,7 @@ budget:
   cyclomatic_max: 14
   nesting_max: 4
 tests: "src/agent/coupons/evaluate_coupon.test.ts"
-tests_sha256: "e75e7204ca1630038822f1b30d16597c3b90841898d8e2de5f28170ddcf23194"
+tests_sha256: "c620334ff46497ce9f1cefb7bdf798ddf48b4910de063b02e9e2ecaf0c5ff480"
 touch_only: ['src/agent/coupons/evaluate_coupon.ts']
 deps_allowed: []
 forbids: ['network', 'subprocess', 'llm']
@@ -40,6 +40,16 @@ un codigo ya se uso, lo cual es estado persistente (batch 2, cuando se
 integre con SQLite) -- esta funcion solo evalua las reglas ESTRUCTURALES del
 cupon (vigencia, minimo, aplicabilidad) contra un carrito dado.
 
+Issue #9 (promociones vinculadas) agrega `appliesToPromotionalItems:
+boolean` a `Coupon`: indica si el DESCUENTO de este cupon puede aplicarse
+tambien a un item que ya tiene una promocion vinculada activa (ver
+[promotions-evaluate-promotion](./promotions-evaluate-promotion.md)). Es
+SOLO un campo de datos -- `evaluateCoupon` no lo lee ni cambia su
+comportamiento por el; la logica que lo combina con
+`PromotionRule.combinableWithCoupons` (dando prioridad al cupon si
+contradicen, decision del usuario) vive en un batch posterior que combina
+ambas evaluaciones.
+
 ## Interface
 ```typescript
 import type { Cart } from "../cart/cart_db.ts";
@@ -51,6 +61,7 @@ export interface Coupon {
   validFrom: string | null;
   validUntil: string | null;
   applicableProductIds: string[] | null;
+  appliesToPromotionalItems: boolean;
 }
 export interface CouponEvaluation {
   valid: boolean;
@@ -106,6 +117,8 @@ function evaluateCoupon(cart: Cart, coupon: Coupon | null, now: string): CouponE
 - Cupon con `applicableProductIds: ["999"]` y ningun item del carrito con
   ese id -> invalido.
 - `evaluateCoupon(cart, null, now)` -> invalido, "coupon not found".
+- Mismo cupon con `appliesToPromotionalItems: true` vs `false` -> resultado
+  IDENTICO (el campo no participa en el calculo de esta funcion).
 
 ## Do / Don't
 - DO: usar `now` (parametro) para TODA comparacion de fecha -- nunca
@@ -118,12 +131,20 @@ function evaluateCoupon(cart: Cart, coupon: Coupon | null, now: string): CouponE
   batches siguientes.
 - DON'T: implementar promociones vinculadas entre productos (issue #6 lo
   incluye en el alcance general, pero el usuario pidio explicitamente
-  dejarlas fuera de este batch).
+  dejarlas fuera de este batch; ver issue #9 para ese alcance).
+- DON'T: usar `appliesToPromotionalItems` (issue #9) dentro de esta
+  funcion -- el campo se agrega a la interfaz `Coupon` para que un batch
+  posterior lo lea al COMBINAR esta evaluacion con
+  [promotions-evaluate-promotion](./promotions-evaluate-promotion.md); esta
+  funcion sigue evaluando el cupon en aislamiento, sin saber que existen
+  promociones.
 
 ## Tests
 (Los tests estan en `src/agent/coupons/evaluate_coupon.test.ts`, oraculo
 congelado con `node:test`, con un carrito fijo de 2 items en memoria -- sin
-SQLite real.)
+SQLite real. 14 tests originales de issue #6, mas 1 test nuevo de issue #9
+que confirma que `appliesToPromotionalItems` no afecta el resultado de esta
+funcion.)
 
 ## Constraints
 - Sin red, sin subprocess, sin llamadas a modelo (`forbids`).

@@ -16,6 +16,8 @@ export interface CartDb {
   saveCart(cart: Cart): void;
   getCouponCode(conversationId: string): string | null;
   setCouponCode(conversationId: string, code: string | null): void;
+  getPromotionId(conversationId: string): string | null;
+  setPromotionId(conversationId: string, id: string | null): void;
   close(): void;
 }
 
@@ -36,15 +38,29 @@ export function openCartDb(location: string): CartDb {
       conversationId TEXT PRIMARY KEY,
       items TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
-      couponCode TEXT
+      couponCode TEXT,
+      promotionId TEXT
     )
   `);
 
-  // UPSERT that preserves a previously applied couponCode: on conflict we
-  // only overwrite items/updatedAt, never the coupon column (contract invariant).
+  // Migrate older carts tables (pre-promotions) that lack the coupon/promotion
+  // columns. CREATE TABLE IF NOT EXISTS does not add columns to an existing
+  // table, so an older data/cart.sqlite would make the INSERT below fail with
+  // "table carts has no column named promotionId".
+  const cartCols = db.prepare("PRAGMA table_info(carts)").all() as { name: string }[];
+  const cartColNames = new Set(cartCols.map((c) => c.name));
+  for (const col of ["couponCode", "promotionId"]) {
+    if (!cartColNames.has(col)) {
+      db.exec(`ALTER TABLE carts ADD COLUMN ${col} TEXT`);
+    }
+  }
+
+  // UPSERT that preserves a previously applied couponCode/promotionId: on
+  // conflict we only overwrite items/updatedAt, never the coupon or promotion
+  // columns (contract invariant).
   const upsert = db.prepare(`
-    INSERT INTO carts (conversationId, items, updatedAt, couponCode)
-    VALUES (?, ?, ?, NULL)
+    INSERT INTO carts (conversationId, items, updatedAt, couponCode, promotionId)
+    VALUES (?, ?, ?, NULL, NULL)
     ON CONFLICT(conversationId) DO UPDATE SET
       items = excluded.items,
       updatedAt = excluded.updatedAt
@@ -53,6 +69,10 @@ export function openCartDb(location: string): CartDb {
   const getCoupon = db.prepare("SELECT couponCode FROM carts WHERE conversationId = ?");
   const setCoupon = db.prepare(`
     UPDATE carts SET couponCode = ? WHERE conversationId = ?
+  `);
+  const getPromotion = db.prepare("SELECT promotionId FROM carts WHERE conversationId = ?");
+  const setPromotion = db.prepare(`
+    UPDATE carts SET promotionId = ? WHERE conversationId = ?
   `);
 
   return {
@@ -84,6 +104,23 @@ export function openCartDb(location: string): CartDb {
         throw new Error(`setCouponCode: cart for ${conversationId} does not exist`);
       }
       setCoupon.run(code, conversationId);
+    },
+    getPromotionId(conversationId: string): string | null {
+      const row = getPromotion.get(conversationId) as { promotionId: string | null } | undefined;
+      if (row === undefined) return null;
+      return row.promotionId;
+    },
+    setPromotionId(conversationId: string, id: string | null): void {
+      if (id === null) {
+        // Idempotent: no-op if no cart exists, otherwise clear the promotion.
+        setPromotion.run(null, conversationId);
+        return;
+      }
+      const row = getById.get(conversationId) as Record<string, unknown> | undefined;
+      if (row === undefined) {
+        throw new Error(`setPromotionId: cart for ${conversationId} does not exist`);
+      }
+      setPromotion.run(id, conversationId);
     },
     close(): void {
       db.close();
