@@ -53,11 +53,12 @@ src/agent/
     cart_add_item.ts / cart_remove_item.ts / cart_set_quantity.ts / cart_summary.ts  # operaciones puras
   orders/
     orders_db.ts                # ordenes/pagos/eventos, maquina de estados (ver seccion Carrito y checkout)
+    filter_orders.ts            # filtro puro por estado/id/fecha para el dashboard admin
   web/
     server.ts                   # composition root: servidor HTTP (no CCDD-contractado)
     render_markdown.ts          # markdown -> HTML seguro contra XSS
     render_pay_page.ts          # HTML de la pagina mock de pago
-    public/                     # frontend estatico (HTML/CSS/JS sin build)
+    public/                     # frontend estatico (HTML/CSS/JS sin build): chat + /admin
   main.ts                      # composition root: CLI, cablea todo lo anterior (no CCDD-contractado)
 ```
 
@@ -94,6 +95,32 @@ crea una orden `pending_payment` con un pay link único y vacía el carrito.
 
 ```bash
 rm -f data/cart.sqlite data/orders.sqlite   # reset: carrito/órdenes de demo (gitignored)
+```
+
+## Dashboard administrativo
+
+`/admin` (servido por el mismo proceso de `npm run web`) es un panel local de
+solo-lectura-y-transiciones para gestionar pedidos, **sin autenticación**
+(decisión explícita del MVP: un único administrador local, actor fijo
+`local-admin` en el log de auditoría).
+
+- Lee y actualiza la MISMA base que el flujo de pagos (`data/orders.sqlite`),
+  sin estado paralelo — el listado sale de `OrdersDb.listOrders()`, filtrado
+  en memoria por estado/id/rango de fecha (`orders/filter_orders.ts`).
+- El detalle de cada orden muestra el historial completo de eventos
+  (`order_created`, `payment_approved`/`payment_rejected`, y las
+  transiciones manuales) con actor, fecha, estado anterior/nuevo y motivo.
+- Transiciones administrativas permitidas: `paid -> shipped` y
+  `paid | pending_payment -> cancelled`. `shipped` es un estado simulado
+  (sin dirección, transportista ni integración logística real).
+- La validación vive en la capa de dominio (`OrdersDb.adminTransition`), no
+  en la UI: invocar la API de transición directamente con un estado inválido
+  (ej. `shipped` sobre una orden `pending_payment`) devuelve `409` igual que
+  si se intentara desde el panel.
+
+```bash
+npm run web
+# abrir http://localhost:3000/admin
 ```
 
 ## Interfaz web

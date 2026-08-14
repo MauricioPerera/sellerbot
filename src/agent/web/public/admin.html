@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sellerbot admin</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/admin.css" />
+</head>
+<body class="admin">
+  <header>
+    <h1>sellerbot — pedidos</h1>
+    <p class="subtitle">Dashboard administrativo local, sin autenticación (uso único-usuario).</p>
+  </header>
+
+  <main id="admin-main">
+    <form id="filters">
+      <select id="f-status" aria-label="Estado">
+        <option value="">Todos los estados</option>
+        <option value="pending_payment">Pendiente de pago</option>
+        <option value="paid">Pagada</option>
+        <option value="payment_failed">Pago fallido</option>
+        <option value="shipped">Enviada</option>
+        <option value="cancelled">Cancelada</option>
+      </select>
+      <input id="f-id" type="text" placeholder="Buscar por ID…" aria-label="ID de orden" />
+      <input id="f-from" type="date" aria-label="Desde" />
+      <input id="f-to" type="date" aria-label="Hasta" />
+      <button type="submit">Filtrar</button>
+    </form>
+
+    <table id="orders-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Fecha</th>
+          <th>Productos</th>
+          <th>Total</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody id="orders-body"></tbody>
+    </table>
+    <p id="orders-empty" hidden>No hay órdenes que coincidan con el filtro.</p>
+  </main>
+
+  <aside id="detail-panel" hidden>
+    <button id="detail-close" type="button" aria-label="Cerrar">✕</button>
+    <div id="detail-content"></div>
+  </aside>
+
+  <script src="/admin.js"></script>
+</body>
+</html>

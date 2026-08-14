@@ -26,6 +26,8 @@ import { openCatalogDb } from "../catalog/catalog_db.ts";
 import { openConversationDb } from "../conversation/conversation_db.ts";
 import { openCartDb } from "../cart/cart_db.ts";
 import { openOrdersDb } from "../orders/orders_db.ts";
+import type { OrderStatus } from "../orders/orders_db.ts";
+import { filterOrders } from "../orders/filter_orders.ts";
 import { buildResumeContext, updateConversationState } from "../conversation/conversation_context.ts";
 import { renderMarkdown } from "./render_markdown.ts";
 import { renderPayPage } from "./render_pay_page.ts";
@@ -188,12 +190,83 @@ function handlePayAction(
   }
 }
 
+// GET /admin/api/orders?status=&id=&dateFrom=&dateTo= — issue #5 dashboard.
+// Sin autenticacion (decision explicita del issue: uso local, un solo
+// administrador). Filtra en memoria con filterOrders sobre listOrders().
+const ADMIN_STATUSES = new Set(["pending_payment", "paid", "payment_failed", "shipped", "cancelled"]);
+
+function handleAdminOrdersList(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const url = new URL(req.url ?? "", "http://localhost");
+  const status = url.searchParams.get("status") ?? undefined;
+  const id = url.searchParams.get("id") ?? undefined;
+  const dateFrom = url.searchParams.get("dateFrom") ?? undefined;
+  const dateTo = url.searchParams.get("dateTo") ?? undefined;
+
+  if (status !== undefined && !ADMIN_STATUSES.has(status)) {
+    sendJson(res, 400, { error: "invalid status" });
+    return;
+  }
+
+  const orders = filterOrders(ordersDb.listOrders(), {
+    status: status as OrderStatus | undefined,
+    id,
+    dateFrom,
+    dateTo,
+  });
+  sendJson(res, 200, { orders });
+}
+
+// GET /admin/api/orders/:id — detalle + historial de eventos.
+function handleAdminOrderDetail(res: http.ServerResponse, orderId: string): void {
+  const order = ordersDb.getOrder(orderId);
+  if (order === null) {
+    sendJson(res, 404, { error: `no order found with id ${orderId}` });
+    return;
+  }
+  sendJson(res, 200, { order, events: ordersDb.listEvents(orderId) });
+}
+
+// POST /admin/api/orders/:id/transition — cambio manual de estado (shipped
+// o cancelled). Actor fijo "local-admin" (decision explicita del issue: sin
+// login en este prototipo). La capa de dominio (adminTransition) valida la
+// transicion incluso si esta ruta se invoca sin pasar por la UI.
+async function handleAdminTransition(req: http.IncomingMessage, res: http.ServerResponse, orderId: string): Promise<void> {
+  const raw = await readRequestBody(req);
+  let payload: { toStatus?: unknown; reason?: unknown };
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    sendJson(res, 400, { error: "invalid JSON body" });
+    return;
+  }
+
+  if (payload.toStatus !== "shipped" && payload.toStatus !== "cancelled") {
+    sendJson(res, 400, { error: "toStatus must be 'shipped' or 'cancelled'" });
+    return;
+  }
+  if (payload.reason !== undefined && typeof payload.reason !== "string") {
+    sendJson(res, 400, { error: "reason must be a string" });
+    return;
+  }
+
+  try {
+    const order = ordersDb.adminTransition(orderId, payload.toStatus, "local-admin", payload.reason as string | undefined);
+    sendJson(res, 200, { order });
+  } catch (err) {
+    sendJson(res, 409, { error: err instanceof Error ? err.message : "invalid transition" });
+  }
+}
+
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
 const STATIC_FILES: Record<string, { file: string; type: string }> = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },
   "/style.css": { file: "style.css", type: "text/css; charset=utf-8" },
   "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
+  "/admin": { file: "admin.html", type: "text/html; charset=utf-8" },
+  "/admin.html": { file: "admin.html", type: "text/html; charset=utf-8" },
+  "/admin.css": { file: "admin.css", type: "text/css; charset=utf-8" },
+  "/admin.js": { file: "admin.js", type: "text/javascript; charset=utf-8" },
 };
 
 function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): boolean {
@@ -215,6 +288,8 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): boole
 
 const PAY_PAGE_RE = /^\/pay\/([^/]+)$/;
 const PAY_ACTION_RE = /^\/pay\/([^/]+)\/(approve|reject)$/;
+const ADMIN_ORDER_DETAIL_RE = /^\/admin\/api\/orders\/([^/]+)$/;
+const ADMIN_ORDER_TRANSITION_RE = /^\/admin\/api\/orders\/([^/]+)\/transition$/;
 
 const server = http.createServer((req, res) => {
   if (req.method === "POST" && req.url === "/api/chat") {
@@ -231,12 +306,28 @@ const server = http.createServer((req, res) => {
       handlePayPage(req, res, decodeURIComponent(payMatch[1]));
       return;
     }
+    if (url === "/admin/api/orders" || url.startsWith("/admin/api/orders?")) {
+      handleAdminOrdersList(req, res);
+      return;
+    }
+    const detailMatch = url.match(ADMIN_ORDER_DETAIL_RE);
+    if (detailMatch) {
+      handleAdminOrderDetail(res, decodeURIComponent(detailMatch[1]));
+      return;
+    }
   }
   if (req.method === "POST") {
     const actionMatch = url.match(PAY_ACTION_RE);
     if (actionMatch) {
       const result = actionMatch[2] === "approve" ? "approved" : "rejected";
       handlePayAction(req, res, decodeURIComponent(actionMatch[1]), result);
+      return;
+    }
+    const transitionMatch = url.match(ADMIN_ORDER_TRANSITION_RE);
+    if (transitionMatch) {
+      handleAdminTransition(req, res, decodeURIComponent(transitionMatch[1])).catch((err) => {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : "internal error" });
+      });
       return;
     }
   }
