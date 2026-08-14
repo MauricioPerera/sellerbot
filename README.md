@@ -94,7 +94,7 @@ crea una orden `pending_payment` con un pay link único y vacía el carrito.
   timestamp se guardan en SQLite (`orders`, `payments`, `order_events`).
 
 ```bash
-rm -f data/cart.sqlite data/orders.sqlite   # reset: carrito/órdenes de demo (gitignored)
+rm -f data/cart.sqlite data/orders.sqlite data/conversations.sqlite   # reset: carrito/órdenes/historial de demo (gitignored)
 ```
 
 ## Cupones de descuento
