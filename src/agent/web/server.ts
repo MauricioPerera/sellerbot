@@ -16,8 +16,13 @@ import getTimeTool from "../tools/get_time.ts";
 import calculateTool from "../tools/calculate.ts";
 import searchProductsTool from "../tools/search_products.ts";
 import getProductDetailTool from "../tools/get_product_detail.ts";
+import addToCartTool from "../tools/add_to_cart.ts";
+import removeFromCartTool from "../tools/remove_from_cart.ts";
+import updateCartQuantityTool from "../tools/update_cart_quantity.ts";
+import viewCartTool from "../tools/view_cart.ts";
 import { openCatalogDb } from "../catalog/catalog_db.ts";
 import { openConversationDb } from "../conversation/conversation_db.ts";
+import { openCartDb } from "../cart/cart_db.ts";
 import { buildResumeContext, updateConversationState } from "../conversation/conversation_context.ts";
 import { renderMarkdown } from "./render_markdown.ts";
 
@@ -35,16 +40,27 @@ if (catalog.length === 0) {
 }
 
 const conversationDb = openConversationDb("data/conversations.sqlite");
+const cartDb = openCartDb("data/cart.sqlite");
 const client = createPoolsideClient({ apiKey });
-const registry = createToolRegistry([
-  getTimeTool(),
-  calculateTool(),
-  searchProductsTool(catalog),
-  getProductDetailTool(catalog),
-]);
+
+// El registro se arma por conversationId (no una sola vez global) porque las
+// tools de carrito estan atadas a esa conversacion especifica -- el servidor
+// atiende muchas conversaciones concurrentes desde el mismo proceso.
+function buildRegistry(conversationId: string) {
+  return createToolRegistry([
+    getTimeTool(),
+    calculateTool(),
+    searchProductsTool(catalog),
+    getProductDetailTool(catalog),
+    addToCartTool(cartDb, catalog, conversationId),
+    removeFromCartTool(cartDb, conversationId),
+    updateCartQuantityTool(cartDb, conversationId),
+    viewCartTool(cartDb, conversationId),
+  ]);
+}
 
 const SYSTEM_PROMPT =
-  "Always call the calculate tool for arithmetic instead of computing it yourself, even for simple expressions. Always call the get_time tool when asked for the current time instead of guessing it. When asked about products, always call search_products first and never invent a product, price, or attribute that isn't in its results; call get_product_detail with a result's id to answer follow-up questions about a specific product or its variations. Format replies in simple markdown: use **bold** for product names, short '- ' bullet lists for options, and include a product image as ![description](url) when a get_product_detail result has one available.";
+  "Always call the calculate tool for arithmetic instead of computing it yourself, even for simple expressions. Always call the get_time tool when asked for the current time instead of guessing it. When asked about products, always call search_products first and never invent a product, price, or attribute that isn't in its results; call get_product_detail with a result's id to answer follow-up questions about a specific product or its variations. Cart: use add_to_cart to add a product/variation the user picked (never on browsing alone, only when they clearly want it added), remove_from_cart to remove one, update_cart_quantity to set an exact quantity (0 removes it), and view_cart whenever the user asks what's in their cart or before confirming a purchase. All prices and cart totals are in Argentine pesos (ARS), stored as integer cents; always convert to pesos and format like '$ 1.234,56' (never show raw cents). Format replies in simple markdown: use **bold** for product names, short '- ' bullet lists for options, and include a product image as ![description](url) when a get_product_detail result has one available.";
 
 // Historial completo de mensajes por conversationId, en memoria mientras el
 // proceso corre (issue #3, criterio 4: historial dentro de la sesion activa).
@@ -107,7 +123,7 @@ async function handleChat(req: http.IncomingMessage, res: http.ServerResponse): 
   let text = "";
 
   try {
-    messages = await runAgentTurn(client.streamChat, messages, registry, {
+    messages = await runAgentTurn(client.streamChat, messages, buildRegistry(conversationId), {
       onText: (chunk) => {
         text += chunk;
       },
