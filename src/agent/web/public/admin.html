@@ -42,6 +42,37 @@
       <tbody id="orders-body"></tbody>
     </table>
     <p id="orders-empty" hidden>No hay órdenes que coincidan con el filtro.</p>
+
+    <section id="promotions-section">
+      <h2>Promociones</h2>
+
+      <form id="promotion-form">
+        <input id="p-trigger" type="text" placeholder="ID producto disparador" aria-label="Producto disparador" required />
+        <input id="p-discount" type="text" placeholder="ID producto con descuento" aria-label="Producto con descuento" required />
+        <select id="p-type" aria-label="Tipo de descuento">
+          <option value="percentage">Porcentaje</option>
+          <option value="fixed">Monto fijo (centavos)</option>
+        </select>
+        <input id="p-value" type="number" min="1" step="1" placeholder="Valor" aria-label="Valor de descuento" required />
+        <label class="p-check"><input id="p-combinable" type="checkbox" /> Combinable con cupones</label>
+        <button type="submit">Crear promoción</button>
+      </form>
+      <p id="promotion-error" class="form-error" hidden></p>
+
+      <table id="promotions-table">
+        <thead>
+          <tr>
+            <th>Disparador</th>
+            <th>Descuento</th>
+            <th>Tipo / valor</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="promotions-body"></tbody>
+      </table>
+      <p id="promotions-empty" hidden>No hay promociones cargadas.</p>
+    </section>
   </main>
 
   <aside id="detail-panel" hidden>

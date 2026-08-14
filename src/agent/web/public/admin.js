@@ -128,4 +128,102 @@ document.getElementById("detail-close").addEventListener("click", () => {
   document.getElementById("detail-panel").hidden = true;
 });
 
+// --- Promociones (issue #10) ---------------------------------------------
+
+async function loadPromotions() {
+  const res = await fetch("/admin/api/promotions");
+  const data = await res.json();
+  renderPromotions(data.promotions ?? []);
+}
+
+function renderPromotions(promotions) {
+  const body = document.getElementById("promotions-body");
+  const empty = document.getElementById("promotions-empty");
+  body.innerHTML = "";
+  empty.hidden = promotions.length > 0;
+
+  for (const p of promotions) {
+    const tr = document.createElement("tr");
+    tr.dataset.promotionId = p.id;
+    const valueLabel = p.discountType === "percentage" ? `${p.discountValue}%` : formatArs(p.discountValue);
+    tr.innerHTML = `
+      <td>${p.triggerProductId}</td>
+      <td>${p.discountProductId}</td>
+      <td>${valueLabel}${p.combinableWithCoupons ? " <span class=\"promo-tag\">+cupones</span>" : ""}</td>
+      <td><span class="status-pill ${p.active ? "status-active" : "status-inactive"}">${p.active ? "Activa" : "Inactiva"}</span></td>
+      <td class="promo-actions"></td>
+    `;
+    const actions = tr.querySelector(".promo-actions");
+    const toggleBtn = document.createElement("button");
+    toggleBtn.type = "button";
+    toggleBtn.textContent = p.active ? "Desactivar" : "Activar";
+    toggleBtn.addEventListener("click", () => togglePromotion(p.id, !p.active));
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Borrar";
+    deleteBtn.addEventListener("click", () => deletePromotion(p.id));
+    actions.append(toggleBtn, deleteBtn);
+    body.appendChild(tr);
+  }
+}
+
+async function createPromotion(formData) {
+  const errorEl = document.getElementById("promotion-error");
+  const res = await fetch("/admin/api/promotions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(formData),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    errorEl.textContent = data.error ?? "No se pudo crear la promoción.";
+    errorEl.hidden = false;
+    return;
+  }
+  errorEl.hidden = true;
+  document.getElementById("promotion-form").reset();
+  await loadPromotions();
+}
+
+async function togglePromotion(id, active) {
+  const res = await fetch(`/admin/api/promotions/${id}/active`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ active }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const errorEl = document.getElementById("promotion-error");
+    errorEl.textContent = data.error ?? "No se pudo cambiar el estado.";
+    errorEl.hidden = false;
+    return;
+  }
+  await loadPromotions();
+}
+
+async function deletePromotion(id) {
+  const res = await fetch(`/admin/api/promotions/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const errorEl = document.getElementById("promotion-error");
+    errorEl.textContent = data.error ?? "No se pudo borrar la promoción.";
+    errorEl.hidden = false;
+    return;
+  }
+  await loadPromotions();
+}
+
+document.getElementById("promotion-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const formData = {
+    triggerProductId: document.getElementById("p-trigger").value.trim(),
+    discountProductId: document.getElementById("p-discount").value.trim(),
+    discountType: document.getElementById("p-type").value,
+    discountValue: Number(document.getElementById("p-value").value),
+    combinableWithCoupons: document.getElementById("p-combinable").checked,
+  };
+  createPromotion(formData);
+});
+
 loadOrders();
+loadPromotions();

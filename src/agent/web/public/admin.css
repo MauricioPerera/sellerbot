@@ -140,3 +140,101 @@ table#orders-table {
   font-family: inherit;
   resize: vertical;
 }
+
+/* Promociones (issue #10) — mismo patron que #filters / #orders-table. */
+
+#promotions-section {
+  margin-top: 2rem;
+}
+
+#promotions-section h2 {
+  font-size: 1.05rem;
+  margin-bottom: 0.75rem;
+}
+
+#promotion-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+#promotion-form input,
+#promotion-form select {
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+#promotion-form .p-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+#promotion-form button {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: var(--accent);
+  color: #10131a;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#promotion-form .form-error,
+#promotions-section .form-error {
+  color: #e8747a;
+  font-size: 0.85rem;
+  margin: 0 0 0.75rem;
+}
+
+table#promotions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+#promotions-table th,
+#promotions-table td {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+#promotions-table tbody tr:hover {
+  background: var(--panel);
+}
+
+.promo-tag {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.status-active { color: #6fcf97; }
+.status-inactive { color: var(--muted); }
+
+.promo-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.promo-actions button {
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.promo-actions button:hover {
+  background: var(--panel);
+}

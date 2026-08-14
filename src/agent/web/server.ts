@@ -270,6 +270,96 @@ async function handleAdminTransition(req: http.IncomingMessage, res: http.Server
   }
 }
 
+// GET /admin/api/promotions — lista todas las promociones (activas e
+// inactivas) para el panel admin (issue #10). 200 siempre; promotionsDb ya
+// esta en scope del modulo (importado en batch B de issue #9).
+function handleAdminPromotionsList(res: http.ServerResponse): void {
+  sendJson(res, 200, { promotions: promotionsDb.listPromotions() });
+}
+
+// POST /admin/api/promotions — crea una promocion. Valida el body y delega
+// en promotionsDb.createPromotion (que ya tiene su propio contrato/test).
+async function handleAdminPromotionCreate(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const raw = await readRequestBody(req);
+  let payload: {
+    triggerProductId?: unknown;
+    discountProductId?: unknown;
+    discountType?: unknown;
+    discountValue?: unknown;
+    combinableWithCoupons?: unknown;
+  };
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    sendJson(res, 400, { error: "invalid JSON body" });
+    return;
+  }
+
+  if (typeof payload.triggerProductId !== "string" || payload.triggerProductId === "") {
+    sendJson(res, 400, { error: "triggerProductId must be a non-empty string" });
+    return;
+  }
+  if (typeof payload.discountProductId !== "string" || payload.discountProductId === "") {
+    sendJson(res, 400, { error: "discountProductId must be a non-empty string" });
+    return;
+  }
+  if (payload.discountType !== "percentage" && payload.discountType !== "fixed") {
+    sendJson(res, 400, { error: "discountType must be 'percentage' or 'fixed'" });
+    return;
+  }
+  if (typeof payload.discountValue !== "number" || !Number.isFinite(payload.discountValue) || payload.discountValue <= 0) {
+    sendJson(res, 400, { error: "discountValue must be a positive number" });
+    return;
+  }
+  if (typeof payload.combinableWithCoupons !== "boolean") {
+    sendJson(res, 400, { error: "combinableWithCoupons must be a boolean" });
+    return;
+  }
+
+  const promotion = promotionsDb.createPromotion({
+    triggerProductId: payload.triggerProductId,
+    discountProductId: payload.discountProductId,
+    discountType: payload.discountType,
+    discountValue: payload.discountValue,
+    combinableWithCoupons: payload.combinableWithCoupons,
+  });
+  sendJson(res, 201, { promotion });
+}
+
+// POST /admin/api/promotions/:id/active — activa/desactiva una promocion.
+// Si `active` no es boolean -> 400. Si el id no existe, setActive lanza y se
+// captura como 404 (mismo patron que handlePayAction captura el de
+// setPaymentResult).
+async function handleAdminPromotionActive(req: http.IncomingMessage, res: http.ServerResponse, promotionId: string): Promise<void> {
+  const raw = await readRequestBody(req);
+  let payload: { active?: unknown };
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    sendJson(res, 400, { error: "invalid JSON body" });
+    return;
+  }
+
+  if (typeof payload.active !== "boolean") {
+    sendJson(res, 400, { error: "active must be a boolean" });
+    return;
+  }
+
+  try {
+    const promotion = promotionsDb.setActive(promotionId, payload.active);
+    sendJson(res, 200, { promotion });
+  } catch (err) {
+    sendJson(res, 404, { error: err instanceof Error ? err.message : "promotion not found" });
+  }
+}
+
+// DELETE /admin/api/promotions/:id — borra una promocion. deletePromotion es
+// idempotente (nunca lanza), asi que siempre 200 con body vacio.
+function handleAdminPromotionDelete(res: http.ServerResponse, promotionId: string): void {
+  promotionsDb.deletePromotion(promotionId);
+  sendJson(res, 200, {});
+}
+
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
 const STATIC_FILES: Record<string, { file: string; type: string }> = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
@@ -303,6 +393,8 @@ const PAY_PAGE_RE = /^\/pay\/([^/]+)$/;
 const PAY_ACTION_RE = /^\/pay\/([^/]+)\/(approve|reject)$/;
 const ADMIN_ORDER_DETAIL_RE = /^\/admin\/api\/orders\/([^/]+)$/;
 const ADMIN_ORDER_TRANSITION_RE = /^\/admin\/api\/orders\/([^/]+)\/transition$/;
+const ADMIN_PROMOTION_DETAIL_RE = /^\/admin\/api\/promotions\/([^/]+)$/;
+const ADMIN_PROMOTION_ACTIVE_RE = /^\/admin\/api\/promotions\/([^/]+)\/active$/;
 
 const server = http.createServer((req, res) => {
   if (req.method === "POST" && req.url === "/api/chat") {
@@ -328,6 +420,10 @@ const server = http.createServer((req, res) => {
       handleAdminOrderDetail(res, decodeURIComponent(detailMatch[1]));
       return;
     }
+    if (url === "/admin/api/promotions" || url.startsWith("/admin/api/promotions?")) {
+      handleAdminPromotionsList(res);
+      return;
+    }
   }
   if (req.method === "POST") {
     const actionMatch = url.match(PAY_ACTION_RE);
@@ -341,6 +437,26 @@ const server = http.createServer((req, res) => {
       handleAdminTransition(req, res, decodeURIComponent(transitionMatch[1])).catch((err) => {
         sendJson(res, 500, { error: err instanceof Error ? err.message : "internal error" });
       });
+      return;
+    }
+    if (url === "/admin/api/promotions") {
+      handleAdminPromotionCreate(req, res).catch((err) => {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : "internal error" });
+      });
+      return;
+    }
+    const promotionActiveMatch = url.match(ADMIN_PROMOTION_ACTIVE_RE);
+    if (promotionActiveMatch) {
+      handleAdminPromotionActive(req, res, decodeURIComponent(promotionActiveMatch[1])).catch((err) => {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : "internal error" });
+      });
+      return;
+    }
+  }
+  if (req.method === "DELETE") {
+    const promotionDeleteMatch = url.match(ADMIN_PROMOTION_DETAIL_RE);
+    if (promotionDeleteMatch) {
+      handleAdminPromotionDelete(res, decodeURIComponent(promotionDeleteMatch[1]));
       return;
     }
   }
