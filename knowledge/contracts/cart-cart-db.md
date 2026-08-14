@@ -1,8 +1,8 @@
 ---
 type: 'Task Contract'
 title: 'Almacen SQLite del carrito (upsert por conversationId)'
-description: 'Persiste el carrito completo (items, cantidades, snapshot de precio) por conversationId, via node:sqlite, sobreviviendo un reinicio del proceso.'
-tags: ['ccdd', 'cart', 'sqlite']
+description: 'Persiste el carrito completo (items, cantidades, snapshot de precio) y el codigo de cupon aplicado por conversationId, via node:sqlite, sobreviviendo un reinicio del proceso.'
+tags: ['ccdd', 'cart', 'sqlite', 'coupons']
 language: typescript
 
 task: cart_cart_db
@@ -11,10 +11,10 @@ target: src/agent/cart/cart_db.ts
 signature: "function openCartDb(location: string): CartDb"
 test_command: "node --test src/agent/cart/cart_db.test.ts"
 budget:
-  cyclomatic_max: 6
-  nesting_max: 2
+  cyclomatic_max: 10
+  nesting_max: 3
 tests: "src/agent/cart/cart_db.test.ts"
-tests_sha256: "63f251b8d18175339019a5c4712ff6546ee31939f81924e7d01ca721a68b93d3"
+tests_sha256: "da8e94176aba3348df5ef6cec2952827295fd4b9d0afd44b5e2ce9f4454baf29"
 touch_only: ['src/agent/cart/cart_db.ts']
 deps_allowed: []
 forbids: ['network', 'subprocess', 'llm']
@@ -30,6 +30,17 @@ persistencia minima -- guarda, por `conversationId`, la lista completa de items
 [conversation-conversation-db](./conversation-conversation-db.md): `node:sqlite`
 nativo, cero deps, `saveCart` es UPSERT (sobrescribe el carrito completo), no falla
 en duplicado -- un carrito se actualiza en cada turno.
+
+Issue #6 (batch 2, integracion de cupones al carrito) agrega
+`getCouponCode`/`setCouponCode`: el codigo de cupon aplicado se guarda como
+estado AUXILIAR de la conversacion, separado del `Cart` (`Cart` NO gana un
+campo `couponCode` -- deliberado, para no tener que amendar
+`cart_add_item.ts`/`cart_remove_item.ts`/`cart_set_quantity.ts`, que
+construyen su `Cart` de retorno listando los campos explicitamente y no lo
+preservarian). La validacion de SI un cupon es aplicable
+([coupons-evaluate-coupon](./coupons-evaluate-coupon.md)) es responsabilidad
+de la tool que llama a `setCouponCode`, no de este contrato -- aca solo se
+persiste el codigo ya validado.
 
 ## Interface
 ```typescript
@@ -47,6 +58,8 @@ export interface Cart {
 export interface CartDb {
   getCart(conversationId: string): Cart | null;
   saveCart(cart: Cart): void;
+  getCouponCode(conversationId: string): string | null;
+  setCouponCode(conversationId: string, code: string | null): void;
   close(): void;
 }
 function openCartDb(location: string): CartDb
@@ -68,6 +81,22 @@ function openCartDb(location: string): CartDb
   de un item se preserva en el round-trip (producto sin precio cargado).
 - `saveCart` con un `conversationId` no afecta el carrito de conversaciones
   distintas.
+- `getCouponCode(conversationId)`: `null` si no existe un carrito para ese id, o
+  si existe pero no tiene cupon aplicado. Nunca lanza.
+- `setCouponCode(conversationId, code)`:
+  - `code` es un string no nulo (aplicar un cupon): LANZA si no existe un
+    carrito para ese `conversationId` -- no se puede aplicar un cupon a un
+    carrito que no existe.
+  - `code: null` (quitar el cupon aplicado): NO lanza aunque no exista un
+    carrito para ese id -- operacion idempotente, mismo espiritu que
+    `removeCartItem` en `cart_remove_item.ts`.
+  - En cualquier caso exitoso, `setCouponCode` NO modifica `items` ni
+    `updatedAt` del carrito -- solo el campo de cupon.
+- `saveCart` con un carrito nuevo NO borra un cupon previamente aplicado a
+  ese `conversationId` a menos que el propio `saveCart` lo pise
+  explicitamente (en la practica, las tools de carrito no tocan el campo de
+  cupon al llamar `saveCart`, asi que sobrevive las operaciones de
+  agregar/quitar/ajustar cantidad de items).
 - `close()` libera el handle; no se usa el `CartDb` despues.
 
 ## Examples
@@ -78,18 +107,31 @@ function openCartDb(location: string): CartDb
 - Un item con `unitPriceCents: null` sobrevive el round-trip tal cual.
 - Guardar, cerrar, reabrir el mismo archivo -> el carrito sigue ahi (simula un
   reinicio del proceso).
+- `saveCart(cart)` + `setCouponCode("conv-1", "WELCOME10")` + `getCouponCode("conv-1")`
+  -> `"WELCOME10"`.
+- `setCouponCode("conv-1", "WELCOME10")` SIN carrito previo -> lanza.
+- `setCouponCode("conv-1", null)` SIN carrito previo -> no lanza,
+  `getCouponCode` sigue devolviendo `null`.
 
 ## Do / Don't
 - DO: usar `node:sqlite` (`DatabaseSync`) del core de Node, sin dependencia npm.
 - DO: serializar `items` como columna `TEXT` con `JSON.stringify`/`JSON.parse`.
+- DO: guardar el codigo de cupon en su propia columna nullable de la misma
+  tabla `carts` (o una tabla auxiliar si preferis, mientras el comportamiento
+  de arriba se cumpla) -- no dentro del JSON de `items`.
 - DON'T: implementar aca la logica de agregar/quitar/ajustar cantidad -- eso vive
   en `cart_add_item.ts`, `cart_remove_item.ts` y `cart_set_quantity.ts` (funciones
   puras separadas); este contrato solo persiste/recupera el `Cart` completo.
+- DON'T: validar aca si un cupon es elegible/valido -- eso es
+  `evaluate_coupon.ts`; este contrato solo persiste el codigo ya decidido
+  por la tool que lo llama.
 
 ## Tests
 (Los tests estan en `src/agent/cart/cart_db.test.ts`, oraculo congelado con
 `node:test`, usando `:memory:` para los casos deterministas y un archivo temporal
-real para el caso de reinicio.)
+real para el caso de reinicio. Cubre persistencia del carrito (6 tests
+originales de issue #4) mas el codigo de cupon aplicado, aislamiento entre
+conversaciones y persistencia entre reinicios (8 tests nuevos de issue #6).)
 
 ## Constraints
 - Sin red, sin subprocess, sin llamadas a modelo (`forbids`).

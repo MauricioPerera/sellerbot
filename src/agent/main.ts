@@ -15,10 +15,13 @@ import removeFromCartTool from "./tools/remove_from_cart.ts";
 import updateCartQuantityTool from "./tools/update_cart_quantity.ts";
 import viewCartTool from "./tools/view_cart.ts";
 import confirmPurchaseTool from "./tools/confirm_purchase.ts";
+import applyCouponTool from "./tools/apply_coupon.ts";
+import removeCouponTool from "./tools/remove_coupon.ts";
 import { openCatalogDb } from "./catalog/catalog_db.ts";
 import { openConversationDb } from "./conversation/conversation_db.ts";
 import { openCartDb } from "./cart/cart_db.ts";
 import { openOrdersDb } from "./orders/orders_db.ts";
+import { COUPONS } from "./coupons/coupons_data.ts";
 import { buildResumeContext, updateConversationState } from "./conversation/conversation_context.ts";
 
 const apiKey = process.env.POOLSIDE_API_KEY;
@@ -49,8 +52,10 @@ const registry = createToolRegistry([
   addToCartTool(cartDb, catalog, conversationId),
   removeFromCartTool(cartDb, conversationId),
   updateCartQuantityTool(cartDb, conversationId),
-  viewCartTool(cartDb, conversationId),
+  viewCartTool(cartDb, COUPONS, conversationId),
   confirmPurchaseTool(cartDb, ordersDb, conversationId),
+  applyCouponTool(cartDb, COUPONS, conversationId),
+  removeCouponTool(cartDb, conversationId),
 ]);
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
@@ -61,7 +66,7 @@ let messages: AgentMessage[] = [
   {
     role: "system",
     content:
-      "Always call the calculate tool for arithmetic instead of computing it yourself, even for simple expressions. Always call the get_time tool when asked for the current time instead of guessing it. When asked about products, always call search_products first and never invent a product, price, or attribute that isn't in its results; call get_product_detail with a result's id to answer follow-up questions about a specific product or its variations. Cart: use add_to_cart to add a product/variation the user picked (never on browsing alone, only when they clearly want it added), remove_from_cart to remove one, update_cart_quantity to set an exact quantity (0 removes it), and view_cart whenever the user asks what's in their cart or before confirming a purchase. Checkout: only call confirm_purchase after the user EXPLICITLY confirms they want to buy (e.g. 'confirmar compra') — never on browsing or adding items alone; it fails with an error if the cart is empty or has an item with no price, so tell the user that instead of guessing. On success it returns a pay_url: present it to the user as a clickable link and tell them the order is pending payment until they complete it there. All prices and cart totals are in Argentine pesos (ARS), stored as integer cents; always convert to pesos and format like '$ 1.234,56' (never show raw cents).",
+      "Always call the calculate tool for arithmetic instead of computing it yourself, even for simple expressions. Always call the get_time tool when asked for the current time instead of guessing it. When asked about products, always call search_products first and never invent a product, price, or attribute that isn't in its results; call get_product_detail with a result's id to answer follow-up questions about a specific product or its variations. Cart: use add_to_cart to add a product/variation the user picked (never on browsing alone, only when they clearly want it added), remove_from_cart to remove one, update_cart_quantity to set an exact quantity (0 removes it), and view_cart whenever the user asks what's in their cart or before confirming a purchase. Coupons: use apply_coupon when the user gives a coupon code; if it returns an error, tell the user the exact reason instead of guessing or inventing why it failed — never claim a discount was applied unless apply_coupon confirms it. Use remove_coupon if they want to remove it or try a different one. view_cart shows discountCents/finalTotalCents only when a coupon is currently valid; present that final total, not the pre-discount one, whenever a coupon is applied. Checkout: only call confirm_purchase after the user EXPLICITLY confirms they want to buy (e.g. 'confirmar compra') — never on browsing or adding items alone; it fails with an error if the cart is empty or has an item with no price, so tell the user that instead of guessing. On success it returns a pay_url: present it to the user as a clickable link and tell them the order is pending payment until they complete it there. All prices and cart totals are in Argentine pesos (ARS), stored as integer cents; always convert to pesos and format like '$ 1.234,56' (never show raw cents).",
   },
 ];
 

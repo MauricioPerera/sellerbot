@@ -72,3 +72,79 @@ test("openCartDb reopening the same file keeps the prior cart (survives a proces
 
   fs.rmSync(file, { force: true });
 });
+
+test("openCartDb getCouponCode returns null for a conversation with no cart", () => {
+  const db = openCartDb(":memory:");
+  assert.equal(db.getCouponCode("conv-1"), null);
+  db.close();
+});
+
+test("openCartDb getCouponCode returns null when a cart exists but has no coupon applied", () => {
+  const db = openCartDb(":memory:");
+  db.saveCart(sampleCart);
+  assert.equal(db.getCouponCode("conv-1"), null);
+  db.close();
+});
+
+test("openCartDb setCouponCode sets the coupon code on an existing cart", () => {
+  const db = openCartDb(":memory:");
+  db.saveCart(sampleCart);
+  db.setCouponCode("conv-1", "WELCOME10");
+  assert.equal(db.getCouponCode("conv-1"), "WELCOME10");
+  db.close();
+});
+
+test("openCartDb setCouponCode(null) clears a previously applied coupon", () => {
+  const db = openCartDb(":memory:");
+  db.saveCart(sampleCart);
+  db.setCouponCode("conv-1", "WELCOME10");
+  db.setCouponCode("conv-1", null);
+  assert.equal(db.getCouponCode("conv-1"), null);
+  db.close();
+});
+
+test("openCartDb setCouponCode does not alter the cart's items or updatedAt", () => {
+  const db = openCartDb(":memory:");
+  db.saveCart(sampleCart);
+  db.setCouponCode("conv-1", "WELCOME10");
+  const cart = db.getCart("conv-1");
+  assert.deepEqual(cart?.items, sampleCart.items);
+  assert.equal(cart?.updatedAt, sampleCart.updatedAt);
+  db.close();
+});
+
+test("openCartDb setCouponCode throws when applying a code to a conversation with no cart", () => {
+  const db = openCartDb(":memory:");
+  assert.throws(() => db.setCouponCode("conv-1", "WELCOME10"));
+  db.close();
+});
+
+test("openCartDb setCouponCode(null) is a no-op when there is no cart", () => {
+  const db = openCartDb(":memory:");
+  db.setCouponCode("conv-1", null);
+  assert.equal(db.getCouponCode("conv-1"), null);
+  db.close();
+});
+
+test("openCartDb keeps coupon codes separate per conversationId", () => {
+  const db = openCartDb(":memory:");
+  db.saveCart(sampleCart);
+  db.saveCart({ conversationId: "conv-2", items: sampleCart.items, updatedAt: sampleCart.updatedAt });
+  db.setCouponCode("conv-1", "WELCOME10");
+  assert.equal(db.getCouponCode("conv-2"), null);
+  db.close();
+});
+
+test("openCartDb coupon code survives reopening the file (process restart)", () => {
+  const file = path.join(os.tmpdir(), `cart-coupon-test-${Date.now()}-${Math.random()}.sqlite`);
+  const db1 = openCartDb(file);
+  db1.saveCart(sampleCart);
+  db1.setCouponCode("conv-1", "WELCOME10");
+  db1.close();
+
+  const db2 = openCartDb(file);
+  assert.equal(db2.getCouponCode("conv-1"), "WELCOME10");
+  db2.close();
+
+  fs.rmSync(file, { force: true });
+});
