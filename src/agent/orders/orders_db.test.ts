@@ -138,3 +138,95 @@ test("openOrdersDb reopening the same file keeps prior orders (survives a proces
 
   fs.rmSync(file, { force: true });
 });
+
+test("openOrdersDb listOrders returns an empty array on a fresh db", () => {
+  const db = openOrdersDb(":memory:");
+  assert.deepEqual(db.listOrders(), []);
+  db.close();
+});
+
+test("openOrdersDb listOrders returns all created orders, newest first", () => {
+  const db = openOrdersDb(":memory:");
+  const order1 = db.createOrder("conv-1", sampleItems, 13800);
+  const order2 = db.createOrder("conv-2", sampleItems, 13800);
+  const orders = db.listOrders();
+  assert.equal(orders.length, 2);
+  assert.equal(orders[0].id, order2.id);
+  assert.equal(orders[1].id, order1.id);
+  db.close();
+});
+
+test("openOrdersDb adminTransition(shipped) moves a paid order to shipped and records an auditable event", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 13800);
+  db.setPaymentResult(order.id, "approved");
+  const shipped = db.adminTransition(order.id, "shipped", "local-admin", "enviado por correo");
+  assert.equal(shipped.status, "shipped");
+  assert.equal(db.getOrder(order.id)?.status, "shipped");
+
+  const events = db.listEvents(order.id);
+  const last = events[events.length - 1];
+  assert.equal(last.type, "admin_transition");
+  assert.equal(last.actor, "local-admin");
+  assert.equal(last.fromStatus, "paid");
+  assert.equal(last.toStatus, "shipped");
+  assert.equal(last.reason, "enviado por correo");
+  db.close();
+});
+
+test("openOrdersDb adminTransition(cancelled) moves a paid order to cancelled", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 13800);
+  db.setPaymentResult(order.id, "approved");
+  const cancelled = db.adminTransition(order.id, "cancelled", "local-admin");
+  assert.equal(cancelled.status, "cancelled");
+  db.close();
+});
+
+test("openOrdersDb adminTransition(cancelled) moves a pending_payment order to cancelled", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 13800);
+  const cancelled = db.adminTransition(order.id, "cancelled", "local-admin");
+  assert.equal(cancelled.status, "cancelled");
+  db.close();
+});
+
+test("openOrdersDb adminTransition without a reason stores reason as null", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 13800);
+  db.adminTransition(order.id, "cancelled", "local-admin");
+  const events = db.listEvents(order.id);
+  assert.equal(events[events.length - 1].reason, null);
+  db.close();
+});
+
+test("openOrdersDb adminTransition(shipped) throws when the order is not paid", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 13800);
+  assert.throws(() => db.adminTransition(order.id, "shipped", "local-admin"));
+  db.close();
+});
+
+test("openOrdersDb adminTransition(cancelled) throws when the order is payment_failed", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 13800);
+  db.setPaymentResult(order.id, "rejected");
+  assert.throws(() => db.adminTransition(order.id, "cancelled", "local-admin"));
+  db.close();
+});
+
+test("openOrdersDb adminTransition throws when the order is already shipped or cancelled", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 13800);
+  db.setPaymentResult(order.id, "approved");
+  db.adminTransition(order.id, "shipped", "local-admin");
+  assert.throws(() => db.adminTransition(order.id, "shipped", "local-admin"));
+  assert.throws(() => db.adminTransition(order.id, "cancelled", "local-admin"));
+  db.close();
+});
+
+test("openOrdersDb adminTransition throws when the order does not exist", () => {
+  const db = openOrdersDb(":memory:");
+  assert.throws(() => db.adminTransition("missing", "cancelled", "local-admin"));
+  db.close();
+});
