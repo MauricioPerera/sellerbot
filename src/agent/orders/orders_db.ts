@@ -14,6 +14,8 @@ export interface Order {
   status: OrderStatus;
   items: OrderItem[];
   totalCents: number;
+  couponCode: string | null;
+  discountCents: number;
   payToken: string;
   createdAt: string;
   updatedAt: string;
@@ -37,7 +39,12 @@ export interface OrderEvent {
 }
 
 export interface OrdersDb {
-  createOrder(conversationId: string, items: OrderItem[], totalCents: number): Order;
+  createOrder(
+    conversationId: string,
+    items: OrderItem[],
+    totalCents: number,
+    coupon?: { code: string; discountCents: number } | null,
+  ): Order;
   getOrder(orderId: string): Order | null;
   getOrderByPayToken(payToken: string): Order | null;
   getPayment(orderId: string): Payment | null;
@@ -57,6 +64,8 @@ function rowToOrder(row: Record<string, unknown>): Order {
     status: row.status as OrderStatus,
     items: JSON.parse(row.items as string) as OrderItem[],
     totalCents: row.totalCents as number,
+    couponCode: (row.couponCode ?? null) as string | null,
+    discountCents: (row.discountCents ?? 0) as number,
     payToken: row.payToken as string,
     createdAt: row.createdAt as string,
     updatedAt: row.updatedAt as string,
@@ -103,6 +112,8 @@ export function openOrdersDb(location: string): OrdersDb {
       status TEXT NOT NULL,
       items TEXT NOT NULL,
       totalCents INTEGER NOT NULL,
+      couponCode TEXT,
+      discountCents INTEGER,
       payToken TEXT NOT NULL UNIQUE,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL
@@ -134,10 +145,19 @@ export function openOrdersDb(location: string): OrdersDb {
     }
   }
 
+  // Migrate older orders tables (pre-issue #6) that lack the coupon snapshot columns.
+  const orderCols = db.prepare("PRAGMA table_info(orders)").all() as { name: string }[];
+  const orderColNames = new Set(orderCols.map((c) => c.name));
+  for (const [col, type] of [["couponCode", "TEXT"], ["discountCents", "INTEGER"]] as const) {
+    if (!orderColNames.has(col)) {
+      db.exec(`ALTER TABLE orders ADD COLUMN ${col} ${type}`);
+    }
+  }
+
   const insertOrder = db.prepare(`
     INSERT INTO orders
-      (id, conversationId, status, items, totalCents, payToken, createdAt, updatedAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (id, conversationId, status, items, totalCents, couponCode, discountCents, payToken, createdAt, updatedAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertPayment = db.prepare(`
     INSERT INTO payments
@@ -166,19 +186,28 @@ export function openOrdersDb(location: string): OrdersDb {
   `);
 
   return {
-    createOrder(conversationId: string, items: OrderItem[], totalCents: number): Order {
+    createOrder(
+      conversationId: string,
+      items: OrderItem[],
+      totalCents: number,
+      coupon?: { code: string; discountCents: number } | null,
+    ): Order {
       if (items.length === 0) {
         throw new Error("createOrder: cannot create an order with no items");
       }
       const id = crypto.randomUUID();
       const payToken = crypto.randomUUID();
       const now = new Date().toISOString();
+      const couponCode = coupon?.code ?? null;
+      const discountCents = coupon?.discountCents ?? 0;
       const order: Order = {
         id,
         conversationId,
         status: "pending_payment",
         items,
         totalCents,
+        couponCode,
+        discountCents,
         payToken,
         createdAt: now,
         updatedAt: now,
@@ -192,6 +221,8 @@ export function openOrdersDb(location: string): OrdersDb {
           order.status,
           JSON.stringify(order.items),
           order.totalCents,
+          order.couponCode,
+          order.discountCents,
           order.payToken,
           order.createdAt,
           order.updatedAt,

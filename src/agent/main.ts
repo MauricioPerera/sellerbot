@@ -53,7 +53,7 @@ const registry = createToolRegistry([
   removeFromCartTool(cartDb, conversationId),
   updateCartQuantityTool(cartDb, conversationId),
   viewCartTool(cartDb, COUPONS, conversationId),
-  confirmPurchaseTool(cartDb, ordersDb, conversationId),
+  confirmPurchaseTool(cartDb, ordersDb, COUPONS, conversationId),
   applyCouponTool(cartDb, COUPONS, conversationId),
   removeCouponTool(cartDb, conversationId),
 ]);

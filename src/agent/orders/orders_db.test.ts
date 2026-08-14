@@ -230,3 +230,27 @@ test("openOrdersDb adminTransition throws when the order does not exist", () => 
   assert.throws(() => db.adminTransition("missing", "cancelled", "local-admin"));
   db.close();
 });
+
+test("openOrdersDb createOrder without a coupon sets couponCode to null and discountCents to 0", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 13800);
+  assert.equal(order.couponCode, null);
+  assert.equal(order.discountCents, 0);
+  db.close();
+});
+
+test("openOrdersDb createOrder with a coupon sets couponCode and discountCents from the given values", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 12420, { code: "WELCOME10", discountCents: 1380 });
+  assert.equal(order.couponCode, "WELCOME10");
+  assert.equal(order.discountCents, 1380);
+  assert.equal(order.totalCents, 12420);
+  db.close();
+});
+
+test("openOrdersDb getOrder round-trips the coupon fields", () => {
+  const db = openOrdersDb(":memory:");
+  const order = db.createOrder("conv-1", sampleItems, 12420, { code: "WELCOME10", discountCents: 1380 });
+  assert.deepEqual(db.getOrder(order.id), order);
+  db.close();
+});

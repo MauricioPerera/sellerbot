@@ -14,7 +14,7 @@ budget:
   cyclomatic_max: 20
   nesting_max: 4
 tests: "src/agent/orders/orders_db.test.ts"
-tests_sha256: "01f41bdd60962e827f6c4238b5a1ba472a6bfee42f9a54ece17a8703815f4e02"
+tests_sha256: "de36f8408fc158a75706d998c80c782ce954d26244782f3d24a1fc745f29079e"
 touch_only: ['src/agent/orders/orders_db.ts']
 deps_allowed: []
 forbids: ['network', 'subprocess', 'llm']
@@ -51,6 +51,17 @@ humano). `listOrders` es la pieza de lectura que el dashboard (batch 2 de
 issue #5) necesita para el listado -- el filtrado por estado/fecha/id vive en
 la capa web (batch 2), no aca.
 
+Issue #6 batch 3 (snapshot de descuento en la orden): "al crear la orden, se
+conserva un snapshot de items, descuentos y total final" y "SQLite conserva
+la auditoria de regla aplicada, descuento y total". `Order` gana `couponCode`
+y `discountCents`; `createOrder` gana un CUARTO parametro OPCIONAL (los
+llamadores existentes que pasan solo 3 argumentos siguen funcionando igual,
+`couponCode: null`/`discountCents: 0`). `totalCents` sigue siendo el total
+FINAL (ya con el descuento restado, si hubo uno) -- quien llama
+(`confirm_purchase`) es responsable de calcularlo antes de invocar
+`createOrder`, este contrato solo lo persiste junto con que codigo/monto de
+descuento lo produjo.
+
 ## Interface
 ```typescript
 export type OrderStatus = "pending_payment" | "paid" | "payment_failed" | "shipped" | "cancelled";
@@ -67,6 +78,8 @@ export interface Order {
   status: OrderStatus;
   items: OrderItem[];
   totalCents: number;
+  couponCode: string | null;
+  discountCents: number;
   payToken: string;
   createdAt: string;
   updatedAt: string;
@@ -87,7 +100,12 @@ export interface OrderEvent {
   createdAt: string;
 }
 export interface OrdersDb {
-  createOrder(conversationId: string, items: OrderItem[], totalCents: number): Order;
+  createOrder(
+    conversationId: string,
+    items: OrderItem[],
+    totalCents: number,
+    coupon?: { code: string; discountCents: number } | null,
+  ): Order;
   getOrder(orderId: string): Order | null;
   getOrderByPayToken(payToken: string): Order | null;
   getPayment(orderId: string): Payment | null;
@@ -101,12 +119,18 @@ function openOrdersDb(location: string): OrdersDb
 ```
 
 ## Invariants
-- `createOrder(conversationId, items, totalCents)` genera un `id` y un `payToken`
-  nuevos (ambos strings unicos, ej. `crypto.randomUUID()`, DISTINTOS entre si),
-  crea la orden con `status: "pending_payment"`, crea un `Payment` asociado con
-  `status: "pending"`, y agrega un `OrderEvent` con `type: "order_created"`.
-  `createdAt`/`updatedAt` se estampan con la hora real (`new
-  Date().toISOString()`) en el momento de la creacion.
+- `createOrder(conversationId, items, totalCents, coupon?)` genera un `id` y un
+  `payToken` nuevos (ambos strings unicos, ej. `crypto.randomUUID()`,
+  DISTINTOS entre si), crea la orden con `status: "pending_payment"`, crea un
+  `Payment` asociado con `status: "pending"`, y agrega un `OrderEvent` con
+  `type: "order_created"`. `createdAt`/`updatedAt` se estampan con la hora
+  real (`new Date().toISOString()`) en el momento de la creacion.
+- `coupon` OMITIDO o `null` (comportamiento de issue #4, sin cambios): la
+  orden queda con `couponCode: null`, `discountCents: 0`.
+- `coupon: { code, discountCents }` presente: la orden queda con
+  `couponCode: code` y `discountCents: discountCents` TAL CUAL se pasaron --
+  este contrato NO valida el cupon (eso ya lo hizo `evaluate_coupon.ts`
+  antes de llamar aca), solo persiste el snapshot.
 - `createOrder` con `items: []` LANZA (no se puede confirmar una compra vacia).
 - `getOrder(id)`/`getOrderByPayToken(token)` devuelven `null` si no existe,
   nunca lanzan. `getOrderByPayToken` encuentra la MISMA orden que devolveria
@@ -163,6 +187,12 @@ function openOrdersDb(location: string): OrdersDb
   actor: null, ...}, {type: "payment_approved", actor: null, ...}]`, en ese
   orden.
 - `createOrder("conv-1", [], 0)` -> lanza.
+- `createOrder("conv-1", items, 12420, { code: "WELCOME10", discountCents:
+  1380 })` -> `Order` con `totalCents: 12420, couponCode: "WELCOME10",
+  discountCents: 1380`.
+- `createOrder("conv-1", items, 19300)` (sin cuarto argumento) -> `Order`
+  con `couponCode: null, discountCents: 0`, identico al comportamiento
+  previo a issue #6.
 - Orden `paid`, `adminTransition(id, "shipped", "local-admin", "enviado")` ->
   `Order` con `status: "shipped"`; el ultimo evento tiene `actor:
   "local-admin"`, `fromStatus: "paid"`, `toStatus: "shipped"`, `reason:
@@ -191,13 +221,17 @@ function openOrdersDb(location: string): OrdersDb
   fuera de alcance, es opcional segun el issue #4).
 - DON'T: implementar aca filtros por estado/fecha/id -- `listOrders()`
   devuelve todo, el filtrado es responsabilidad de la capa web del dashboard.
+- DON'T: validar el cupon aca (vigencia, elegibilidad, calculo del
+  descuento) -- eso ya paso por `evaluate_coupon.ts` antes; este contrato
+  solo persiste el `code`/`discountCents` que le pasan.
 
 ## Tests
 (Los tests estan en `src/agent/orders/orders_db.test.ts`, oraculo congelado con
 `node:test`, usando `:memory:` para los casos deterministas y un archivo
 temporal real para el caso de reinicio. Cubre creacion/pago (15 tests
-originales de issue #4) mas listado y transiciones administrativas validas
-e invalidas (10 tests nuevos de issue #5).)
+originales de issue #4), listado y transiciones administrativas (10 tests
+de issue #5), y el snapshot de cupon/descuento en la orden (3 tests nuevos
+de issue #6).)
 
 ## Constraints
 - Sin red, sin subprocess, sin llamadas a modelo (`forbids`).
