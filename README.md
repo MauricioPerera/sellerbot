@@ -97,6 +97,34 @@ crea una orden `pending_payment` con un pay link único y vacía el carrito.
 rm -f data/cart.sqlite data/orders.sqlite   # reset: carrito/órdenes de demo (gitignored)
 ```
 
+## Cupones de descuento
+
+El dataset de cupones (`WELCOME10`, `AHORRA500`, `HOODIE15`, `VERANO2025`)
+vive en `src/agent/coupons/coupons_data.ts` y está documentado en
+[`data/README.md`](data/README.md#cupones-srcagentcouponscoupons_datats). El
+agente aplica un código con `apply_coupon` (o lo remueve con
+`remove_coupon`) sobre el carrito de la conversación.
+
+- Eligibilidad determinista, no generada por el modelo: `evaluate_coupon.ts`
+  valida vigencia, mínimo de compra e ítems/variaciones aplicables; el
+  agente solo comunica el resultado, nunca inventa un descuento ni un motivo
+  de rechazo.
+- Un cupón inválido o no elegible devuelve el motivo exacto
+  (`coupon not found`, `coupon expired`, `cart below minimum purchase`,
+  etc.) **sin** modificar el carrito.
+- `view_cart` muestra el descuento y el total final mientras el cupón siga
+  vigente; si el carrito cambia y el cupón deja de aplicar (ítem elegible
+  removido, mínimo de compra roto), se ignora en silencio — el carrito no
+  queda en un estado inconsistente ni el agente reporta un error.
+- `confirm_purchase` **re-evalúa** el cupón al momento de confirmar (nunca
+  confía en un descuento calculado antes) y persiste el snapshot final en la
+  orden: `couponCode`/`discountCents` en `data/orders.sqlite`, junto con el
+  `totalCents` ya descontado. Una confirmación exitosa limpia el cupón de la
+  conversación.
+- Fuera de alcance de esta iteración: **promociones vinculadas entre
+  productos** ("con este producto, el segundo accesorio tiene descuento") —
+  ver [#9](https://github.com/MauricioPerera/sellerbot/issues/9).
+
 ## Dashboard administrativo
 
 `/admin` (servido por el mismo proceso de `npm run web`) es un panel local de
