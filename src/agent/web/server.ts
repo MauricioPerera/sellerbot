@@ -21,12 +21,14 @@ import removeFromCartTool from "../tools/remove_from_cart.ts";
 import updateCartQuantityTool from "../tools/update_cart_quantity.ts";
 import viewCartTool from "../tools/view_cart.ts";
 import confirmPurchaseTool from "../tools/confirm_purchase.ts";
+import checkOrderStatusTool from "../tools/check_order_status.ts";
 import { openCatalogDb } from "../catalog/catalog_db.ts";
 import { openConversationDb } from "../conversation/conversation_db.ts";
 import { openCartDb } from "../cart/cart_db.ts";
 import { openOrdersDb } from "../orders/orders_db.ts";
 import { buildResumeContext, updateConversationState } from "../conversation/conversation_context.ts";
 import { renderMarkdown } from "./render_markdown.ts";
+import { renderPayPage } from "./render_pay_page.ts";
 
 const apiKey = process.env.POOLSIDE_API_KEY;
 if (!apiKey) {
@@ -60,11 +62,12 @@ function buildRegistry(conversationId: string) {
     updateCartQuantityTool(cartDb, conversationId),
     viewCartTool(cartDb, conversationId),
     confirmPurchaseTool(cartDb, ordersDb, conversationId),
+    checkOrderStatusTool(ordersDb),
   ]);
 }
 
 const SYSTEM_PROMPT =
-  "Always call the calculate tool for arithmetic instead of computing it yourself, even for simple expressions. Always call the get_time tool when asked for the current time instead of guessing it. When asked about products, always call search_products first and never invent a product, price, or attribute that isn't in its results; call get_product_detail with a result's id to answer follow-up questions about a specific product or its variations. Cart: use add_to_cart to add a product/variation the user picked (never on browsing alone, only when they clearly want it added), remove_from_cart to remove one, update_cart_quantity to set an exact quantity (0 removes it), and view_cart whenever the user asks what's in their cart or before confirming a purchase. Checkout: only call confirm_purchase after the user EXPLICITLY confirms they want to buy (e.g. 'confirmar compra') — never on browsing or adding items alone; it fails with an error if the cart is empty or has an item with no price, so tell the user that instead of guessing. On success it returns a pay_url: present it to the user as a clickable link (format it as [pagar ahora](url) in markdown) and tell them the order is pending payment until they complete it there. All prices and cart totals are in Argentine pesos (ARS), stored as integer cents; always convert to pesos and format like '$ 1.234,56' (never show raw cents). Format replies in simple markdown: use **bold** for product names, short '- ' bullet lists for options, and include a product image as ![description](url) when a get_product_detail result has one available.";
+  "Always call the calculate tool for arithmetic instead of computing it yourself, even for simple expressions. Always call the get_time tool when asked for the current time instead of guessing it. When asked about products, always call search_products first and never invent a product, price, or attribute that isn't in its results; call get_product_detail with a result's id to answer follow-up questions about a specific product or its variations. Cart: use add_to_cart to add a product/variation the user picked (never on browsing alone, only when they clearly want it added), remove_from_cart to remove one, update_cart_quantity to set an exact quantity (0 removes it), and view_cart whenever the user asks what's in their cart or before confirming a purchase. Checkout: only call confirm_purchase after the user EXPLICITLY confirms they want to buy (e.g. 'confirmar compra') — never on browsing or adding items alone; it fails with an error if the cart is empty or has an item with no price, so tell the user that instead of guessing. On success it returns a pay_url: present it to the user as a clickable link (format it as [pagar ahora](url) in markdown) and tell them the order is pending payment until they complete it there. Use check_order_status with an order_id whenever the user asks about the outcome of a payment — never guess or assume it was approved, always confirm the real persisted status. All prices and cart totals are in Argentine pesos (ARS), stored as integer cents; always convert to pesos and format like '$ 1.234,56' (never show raw cents). Format replies in simple markdown: use **bold** for product names, short '- ' bullet lists for options, and include a product image as ![description](url) when a get_product_detail result has one available.";
 
 // Historial completo de mensajes por conversationId, en memoria mientras el
 // proceso corre (issue #3, criterio 4: historial dentro de la sesion activa).
@@ -146,6 +149,45 @@ async function handleChat(req: http.IncomingMessage, res: http.ServerResponse): 
   sendJson(res, 200, { html: renderMarkdown(text), toolCalls });
 }
 
+function sendHtml(res: http.ServerResponse, status: number, html: string): void {
+  res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(html);
+}
+
+// GET /pay/:token — pagina mock de pago (issue #4 batch 3). Resuelve la
+// orden por payToken y la renderiza; 404 si el token no corresponde a
+// ninguna orden.
+function handlePayPage(req: http.IncomingMessage, res: http.ServerResponse, payToken: string): void {
+  const order = ordersDb.getOrderByPayToken(payToken);
+  if (order === null) {
+    sendHtml(res, 404, "<p>Orden no encontrada.</p>");
+    return;
+  }
+  sendHtml(res, 200, renderPayPage(order));
+}
+
+// POST /pay/:token/approve|reject — simula el resultado del pago mock.
+// Resuelve la orden por payToken, aplica la transicion, y re-renderiza la
+// misma pagina con el resultado.
+function handlePayAction(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  payToken: string,
+  result: "approved" | "rejected",
+): void {
+  const order = ordersDb.getOrderByPayToken(payToken);
+  if (order === null) {
+    sendHtml(res, 404, "<p>Orden no encontrada.</p>");
+    return;
+  }
+  try {
+    const { order: updated } = ordersDb.setPaymentResult(order.id, result);
+    sendHtml(res, 200, renderPayPage(updated));
+  } catch (err) {
+    sendHtml(res, 409, `<p>${err instanceof Error ? err.message : "No se pudo procesar el pago."}</p>`);
+  }
+}
+
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
 const STATIC_FILES: Record<string, { file: string; type: string }> = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
@@ -171,6 +213,9 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): boole
   return true;
 }
 
+const PAY_PAGE_RE = /^\/pay\/([^/]+)$/;
+const PAY_ACTION_RE = /^\/pay\/([^/]+)\/(approve|reject)$/;
+
 const server = http.createServer((req, res) => {
   if (req.method === "POST" && req.url === "/api/chat") {
     handleChat(req, res).catch((err) => {
@@ -178,6 +223,24 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
+
+  const url = req.url ?? "";
+  if (req.method === "GET") {
+    const payMatch = url.match(PAY_PAGE_RE);
+    if (payMatch) {
+      handlePayPage(req, res, decodeURIComponent(payMatch[1]));
+      return;
+    }
+  }
+  if (req.method === "POST") {
+    const actionMatch = url.match(PAY_ACTION_RE);
+    if (actionMatch) {
+      const result = actionMatch[2] === "approve" ? "approved" : "rejected";
+      handlePayAction(req, res, decodeURIComponent(actionMatch[1]), result);
+      return;
+    }
+  }
+
   if (serveStatic(req, res)) return;
   res.writeHead(404, { "Content-Type": "text/plain" });
   res.end("Not found");
