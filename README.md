@@ -131,8 +131,9 @@ Reglas del tipo "si tenés el producto A en el carrito, el producto B tiene
 descuento" (ej. "con este hoodie, el segundo con 50% off"). A diferencia de
 los cupones (dataset fijo en código), las reglas viven en
 `data/promotions.sqlite` vía `src/agent/promotions/promotions_db.ts` — un
-CRUD real pensado para un panel administrativo (crear/desactivar/borrar
-reglas en runtime, no hardcodeadas).
+CRUD real administrable en runtime (crear/desactivar/borrar reglas, no
+hardcodeadas) desde el panel `/admin` (ver
+[Dashboard administrativo](#dashboard-administrativo)).
 
 - **Nunca se aplican solas.** `check_promotions` es de solo lectura: el
   agente la llama después de agregar un producto al carrito para ver si
@@ -186,6 +187,13 @@ solo-lectura-y-transiciones para gestionar pedidos, **sin autenticación**
   en la UI: invocar la API de transición directamente con un estado inválido
   (ej. `shipped` sobre una orden `pending_payment`) devuelve `409` igual que
   si se intentara desde el panel.
+- El mismo panel tiene una sección **Promociones** (issue #10) que expone
+  el CRUD de `promotions_db.ts` por `GET`/`POST /admin/api/promotions`,
+  `POST /admin/api/promotions/:id/active` y
+  `DELETE /admin/api/promotions/:id`: crear una regla (producto disparador,
+  producto con descuento, tipo/valor, si combina con cupones),
+  activarla/desactivarla, o borrarla — sin tocar `data/promotions.sqlite`
+  a mano.
 
 ```bash
 npm run web
