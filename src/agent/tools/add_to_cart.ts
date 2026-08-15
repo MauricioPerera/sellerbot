@@ -1,12 +1,15 @@
 import type { AgentTool } from "../tool_registry.ts";
 import type { DbProduct } from "../catalog/catalog_db.ts";
 import type { CartDb } from "../cart/cart_db.ts";
+import type { PromotionsDb } from "../promotions/promotions_db.ts";
 import { addCartItem } from "../cart/cart_add_item.ts";
 import { summarizeCart } from "../cart/cart_summary.ts";
+import { findApplicablePromotions } from "../promotions/find_applicable_promotions.ts";
 
 export function addToCartTool(
   cartDb: CartDb,
   catalog: DbProduct[],
+  promotionsDb: PromotionsDb,
   conversationId: string,
 ): AgentTool {
   return {
@@ -58,7 +61,12 @@ export function addToCartTool(
       cartDb.saveCart(saved);
 
       const item = saved.items.find((i) => i.productId === productId)!;
-      return { item, cart: summarizeCart(saved) };
+      const available_promotions = findApplicablePromotions(
+        saved,
+        promotionsDb.listPromotions(),
+        catalog,
+      );
+      return { item, cart: summarizeCart(saved), available_promotions };
     },
   };
 }
