@@ -1,7 +1,7 @@
-// Composition helper compartido entre main.ts (CLI) y web/server.ts (UI web):
-// no es una unidad CCDD-contractada, es orquestacion que combina piezas ya
-// contractadas (AgentMessage de agent_loop.ts, ConversationDb, DbProduct).
-// Extraido para no duplicar esta logica entre los dos composition roots.
+// Unidad CCDD-contractada (issue #13): ver
+// knowledge/contracts/conversation-conversation-context.md.
+// Compartida entre main.ts (CLI) y web/server.ts (UI web) para no duplicar
+// esta logica entre los dos composition roots.
 import type { AgentMessage } from "../agent_loop.ts";
 import type { ConversationDb, ConversationState } from "./conversation_db.ts";
 import type { DbProduct } from "../catalog/catalog_db.ts";
